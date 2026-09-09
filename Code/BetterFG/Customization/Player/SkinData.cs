@@ -45,6 +45,8 @@ namespace BetterFG.Customization.Player
         // placement instead of ours
         public Dictionary<string, string> ownerSettings;
 
+        public SkinInfo Copy() => (SkinInfo)MemberwiseClone();
+
         public string OwnerSetting(string key, string def) =>
             ownerSettings != null
                 ? (ownerSettings.TryGetValue(key, out var v) && !string.IsNullOrEmpty(v) ? v : def)

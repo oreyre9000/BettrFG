@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -64,6 +64,11 @@ namespace BetterFG.Features.Replay
         public string bfgFaceplate = "";
         public RemoteNametagInfo nametag;
         public float outTime = -1f;
+        public float inTime;
+#if MACHINIMA
+        public readonly List<MachinimaMove> moves = new List<MachinimaMove>();
+        public readonly List<MachinimaAction> actions = new List<MachinimaAction>();
+#endif
         public readonly List<RemoteSkinEntry> bfgSkins = new List<RemoteSkinEntry>();
         public readonly List<SkinTexEntry> bfgTextures = new List<SkinTexEntry>();
         public readonly List<ReplayFrame> frames = new List<ReplayFrame>();
@@ -394,6 +399,7 @@ namespace BetterFG.Features.Replay
         public string backgroundScene = "";
         public string levelJson = "";
         public bool isUgc;
+        public bool isMachinima;
         public bool isFinal;
         public uint squadSize;
         public float duration;

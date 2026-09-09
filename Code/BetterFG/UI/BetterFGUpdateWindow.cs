@@ -40,6 +40,11 @@ namespace BetterFG.UI
 
         private const float RECHECK_INTERVAL = 300f; // 5 min
 
+        // the check can finish while the startup sequence or the tour still owns the screen, and the
+        // window would land on top of them. hold it until the tour has written its seen key, then
+        // let the loading cover pull back before sliding in.
+        private const float POST_ONBOARDING_DELAY = 10f;
+
         private string _latest;
         private string _current;
         private string _changelog;
@@ -106,6 +111,11 @@ namespace BetterFG.UI
             _current = current;
             _changelog = changelog;
             Plugin.Log.LogInfo($"version mismatch: running {current}, latest release {latest}");
+
+            while (SettingsService.Get(Features.Onboarding.OnboardingController.KEY_SEEN, "false") != "true")
+                yield return new WaitForSecondsRealtime(0.5f);
+            yield return new WaitForSecondsRealtime(POST_ONBOARDING_DELAY);
+
             Build();
         }
 
@@ -190,6 +200,18 @@ namespace BetterFG.UI
             foreach (var raw in lines)
             {
                 var line = raw;
+                // ![alt](url) is rendered as a real image below the text, so drop the whole thing
+                // here instead of letting the link unwrap below leave a stray "!alt".
+                int im;
+                while ((im = line.IndexOf("![", StringComparison.Ordinal)) >= 0)
+                {
+                    int irb = line.IndexOf(']', im);
+                    if (irb < 0 || irb + 1 >= line.Length || line[irb + 1] != '(') break;
+                    int irp = line.IndexOf(')', irb);
+                    if (irp < 0) break;
+                    line = line.Substring(0, im) + line.Substring(irp + 1);
+                }
+
                 // [label](url) -> label
                 int lb;
                 while ((lb = line.IndexOf('[')) >= 0)
@@ -208,6 +230,56 @@ namespace BetterFG.UI
                 outSb.Append(line).Append('\n');
             }
             return outSb.ToString().Trim();
+        }
+
+        // markdown ![alt](url) and html <img src="url">, in the order they appear in the body.
+        private static System.Collections.Generic.List<string> ExtractImageUrls(string s)
+        {
+            var urls = new System.Collections.Generic.List<string>();
+            if (string.IsNullOrEmpty(s)) return urls;
+
+            int i = 0;
+            while ((i = s.IndexOf("![", i, StringComparison.Ordinal)) >= 0)
+            {
+                int rb = s.IndexOf(']', i);
+                if (rb < 0) break;
+                if (rb + 1 < s.Length && s[rb + 1] == '(')
+                {
+                    int rp = s.IndexOf(')', rb);
+                    if (rp > 0) urls.Add(TrimUrl(s.Substring(rb + 2, rp - rb - 2)));
+                }
+                i = rb + 1;
+            }
+
+            i = 0;
+            while ((i = s.IndexOf("<img", i, StringComparison.OrdinalIgnoreCase)) >= 0)
+            {
+                int close = s.IndexOf('>', i);
+                if (close < 0) break;
+                string tag = s.Substring(i, close - i);
+                int si = tag.IndexOf("src", StringComparison.OrdinalIgnoreCase);
+                if (si >= 0)
+                {
+                    int q1 = tag.IndexOfAny(new[] { '"', '\'' }, si);
+                    if (q1 > 0)
+                    {
+                        int q2 = tag.IndexOf(tag[q1], q1 + 1);
+                        if (q2 > 0) urls.Add(TrimUrl(tag.Substring(q1 + 1, q2 - q1 - 1)));
+                    }
+                }
+                i = close + 1;
+            }
+
+            urls.RemoveAll(u => string.IsNullOrEmpty(u) || !u.StartsWith("http", StringComparison.OrdinalIgnoreCase));
+            return urls;
+        }
+
+        // markdown allows ![alt](url "title") — the title isn't part of the url
+        private static string TrimUrl(string u)
+        {
+            u = u.Trim();
+            int sp = u.IndexOf(' ');
+            return sp > 0 ? u.Substring(0, sp) : u;
         }
 
         private static string Norm(string v) => v.Trim().TrimStart('v', 'V');
@@ -301,9 +373,27 @@ namespace BetterFG.UI
             clRt.anchorMax = new Vector2(0f, 1f);
             clRt.pivot = new Vector2(0f, 1f);
             clRt.sizeDelta = new Vector2(textW, 0f);
-            float textH = clText.preferredHeight;
-            clRt.sizeDelta = new Vector2(textW, textH);
-            content.sizeDelta = new Vector2(0f, textH);
+
+            _clText = clText;
+            _clContent = content;
+            _clTextW = textW;
+
+            foreach (var url in ExtractImageUrls(_changelog))
+            {
+                var imgGo = new GameObject("ChangelogImg");
+                imgGo.transform.SetParent(content, false);
+                var irt = imgGo.AddComponent<RectTransform>();
+                irt.anchorMin = new Vector2(0f, 1f);
+                irt.anchorMax = new Vector2(0f, 1f);
+                irt.pivot = new Vector2(0f, 1f);
+                irt.sizeDelta = new Vector2(textW, 0f);
+                var raw = imgGo.AddComponent<RawImage>();
+                raw.raycastTarget = false;
+                _clImages.Add(raw);
+                StartCoroutine(LoadChangelogImage(url, raw).WrapToIl2Cpp());
+            }
+
+            RelayoutChangelog();
 
             // primary action is a link on its own row. if the installer left its path behind we
             // relaunch it + quit; otherwise the link just opens the installer download page.
@@ -329,6 +419,55 @@ namespace BetterFG.UI
             UGUIShip.CreateButton(rootT,
                 new Rect(pad + 90f, btnY, 200f, btnH),
                 $"Don't show {_latest} again", BTN, WHITE, FS_BTN, new Action(DontShowAgain));
+        }
+
+        private Text _clText;
+        private RectTransform _clContent;
+        private float _clTextW;
+        private readonly System.Collections.Generic.List<RawImage> _clImages =
+            new System.Collections.Generic.List<RawImage>();
+
+        private IEnumerator LoadChangelogImage(string url, RawImage target)
+        {
+            var req = UnityWebRequestTexture.GetTexture(url);
+            req.SetRequestHeader("User-Agent", "BettrFG");
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                var tex = DownloadHandlerTexture.GetContent(req);
+                tex.wrapMode = TextureWrapMode.Clamp;
+                tex.hideFlags = HideFlags.HideAndDontSave;
+                if (target != null) target.texture = tex;
+            }
+            else Plugin.Log.LogInfo($"changelog image didn't load ({req.result}): {url}");
+
+            req.Dispose();
+            RelayoutChangelog();
+        }
+
+        // text height has to come from the TMP mirror, not the Arial Text underneath it, or the
+        // content is sized for fewer lines than get drawn and the tail is unreachable. images stack
+        // under the text and only take space once their download has actually landed.
+        private void RelayoutChangelog()
+        {
+            if (_clText == null || _clContent == null) return;
+
+            float y = UGUIShip.PreferredHeight(_clText, _clTextW);
+            _clText.GetComponent<RectTransform>().sizeDelta = new Vector2(_clTextW, y);
+
+            foreach (var img in _clImages)
+            {
+                if (img == null || img.texture == null) continue;
+                float h = _clTextW * img.texture.height / (float)img.texture.width;
+                var rt = img.GetComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(_clTextW, h);
+                y += 8f;
+                rt.anchoredPosition = new Vector2(0f, -y);
+                y += h;
+            }
+
+            _clContent.sizeDelta = new Vector2(0f, y);
         }
 
         private string _installerPath;

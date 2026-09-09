@@ -498,6 +498,8 @@ namespace BetterFG.Customization.Social
                 var ef = agent.GetMotorFunction<MotorFunctionEmote>();
                 if (ef == null) return;
                 emoteState?.End(-1);
+                var task = agent.MotorTasks?.GetTask<MotorTaskEmote>();
+                if (task != null) task.isRequested = false;
                 ef.RequestStateChange(ef._originalStates[0].ID, MotorAgent.ResourceRequestMode.Forced);
             }
             catch { }

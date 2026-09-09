@@ -37,7 +37,8 @@ namespace BettrFG.uGUI
         public static void RelabelText(TMPro.TMP_Text t, string id)
         {
             if (t == null) return;
-            t.text = LocText(id);
+            string s = LocText(id);
+            if (t.text != s) t.text = s;
         }
 
         // �� Label �������������������������������������������������������������

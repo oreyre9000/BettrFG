@@ -31,6 +31,8 @@ namespace BetterFG.Features.Replay
 {
     public partial class ReplayViewer
     {
+        bool _rightMoved;
+
         void SetupCamera()
         {
             var existing = CameraUtils.GetMainCamera();
@@ -201,17 +203,26 @@ namespace BetterFG.Features.Replay
                 CloseContextMenu();
                 if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
                 _looking = true;
+                _rightMoved = false;
                 _lastMouse = Input.mousePosition;
                 SeedLook();
             }
-            if (Input.GetMouseButtonUp(1)) _looking = false;
+            if (Input.GetMouseButtonUp(1))
+            {
+                bool tap = _looking && !_rightMoved;
+                _looking = false;
+                _rightMoved = false;
+#if MACHINIMA
+                if (tap && Machinima && _solo == null) ShowWorldMenu();
+#endif
+            }
             if (!_looking) return;
 
             Vector3 now = Input.mousePosition;
             Vector3 delta = now - _lastMouse;
             _lastMouse = now;
 
-            if (delta.sqrMagnitude > 0f) _freeLook = true;
+            if (delta.sqrMagnitude > 0f) { _freeLook = true; _rightMoved = true; }
             _yaw += delta.x * 0.18f;
             _pitch = Mathf.Clamp(_pitch - delta.y * 0.18f, -89f, 89f);
             _cam.transform.rotation = Quaternion.Euler(_pitch, _yaw, 0f);

@@ -42,8 +42,7 @@ namespace BetterFG.Features.Replay
         public static int Kbps => Bitrates[BitrateIndex];
         public static int JpgQuality => Quality[BitrateIndex];
 
-        public static string ExportDir =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BettrFG", "Exports");
+        public static string ExportDir => Path.Combine(SettingsService.ExportsDir, "Replays");
 
         public static string NewFolder(string label)
         {

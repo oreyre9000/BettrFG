@@ -38,6 +38,8 @@ namespace BetterFG.Features.CustomBackgrounds
 
         private const float DefinerOffsetX = -500f;
 
+        internal static readonly Vector3 NightTerrainSpawn = new Vector3(-15.3f, -22.3f, -29.8f);
+
         internal static readonly List<Entry> Catalog = new List<Entry>
         {
             new Entry("Beta - Day", "terrain_beta_day", "#3DFF90", new Vector3(DefinerOffsetX, 0f, 0f), Vector3.zero),
@@ -278,6 +280,7 @@ namespace BetterFG.Features.CustomBackgrounds
 
                 var spawned = UnityEngine.Object.Instantiate(prefab, root.transform, true);
                 spawned.name = entry.Bundle;
+                if (entry.Bundle == "terrain_beta_night") spawned.transform.localPosition = NightTerrainSpawn;
                 spawned.SetActive(true);
                 _spawned = spawned;
                 Plugin.Log.LogInfo($"'{entry.Title}' up under {root.name}");

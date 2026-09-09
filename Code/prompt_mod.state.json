@@ -5,6 +5,7 @@
     "Obf":  false,
     "Dl":  true,
     "Kill":  true,
+    "Mach":  false,
     "Epic":  true,
     "Ea":  true,
     "Comp":  false

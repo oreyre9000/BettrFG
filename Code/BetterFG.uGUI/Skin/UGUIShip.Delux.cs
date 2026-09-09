@@ -84,6 +84,25 @@ namespace BettrFG.uGUI
             RegisterShine(img);
         }
 
+        public static void ApplyDeluxColorFill(Image img, float ppuMult = 2f)
+        {
+            var s = LoadDeluxSlice("BetterFG.assets.ui.general.uisprite_delux_colorfill.png", ref _deluxFillSprite);
+            if (s == null) return;
+            img.sprite = s;
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = ppuMult;
+        }
+
+        public static void ApplyDeluxShine(Image img, float ppuMult = 2f)
+        {
+            var s = LoadDeluxSlice("BetterFG.assets.ui.general.uisprite_delux_shineoverlay.png", ref _deluxShineSprite);
+            if (s == null) return;
+            img.sprite = s;
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = ppuMult;
+            RegisterShine(img);
+        }
+
         // the rounded panel-outline 9-slice on `img` — a framed border with a see-through middle.
         // for panels/cards that should read as an outlined frame rather than a filled slab.
         public static void ApplyDeluxPanelOutline(Image img, float ppuMult = 2f)
@@ -100,7 +119,7 @@ namespace BettrFG.uGUI
         // rounded shape (Mask on the fill slice), and the panel-outline 9-slice as the border on top.
         // returns (container, inner) — caller sizes `container` and adds an Image/RawImage on `inner`.
         public static (RectTransform container, RectTransform inner) CreateFramedImage(Transform parent,
-            Color? fill = null, string name = "FramedImage")
+            Color? fill = null, string name = "FramedImage", float ppuMult = 3f)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -114,7 +133,7 @@ namespace BettrFG.uGUI
             var mRt = maskGo.AddComponent<RectTransform>();
             mRt.anchorMin = Vector2.zero; mRt.anchorMax = Vector2.one; mRt.offsetMin = mRt.offsetMax = Vector2.zero;
             var mImg = maskGo.AddComponent<Image>();
-            ApplyDeluxBase(mImg, 3f);
+            ApplyDeluxBase(mImg, ppuMult);
             mImg.color = fill ?? new Color(0.04f, 0.04f, 0.04f, 1f);
             maskGo.AddComponent<Mask>().showMaskGraphic = true;
 
@@ -131,10 +150,56 @@ namespace BettrFG.uGUI
             var oRt = outGo.AddComponent<RectTransform>();
             oRt.anchorMin = Vector2.zero; oRt.anchorMax = Vector2.one; oRt.offsetMin = oRt.offsetMax = Vector2.zero;
             var oImg = outGo.AddComponent<Image>();
-            ApplyDeluxPanelOutline(oImg, 3f);
+            ApplyDeluxPanelOutline(oImg, ppuMult);
             oImg.raycastTarget = false;
 
             return (rt, iRt);
+        }
+
+        // a delux progress bar: a dark track under a delux-skinned fill (colorfill + shine) whose
+        // width is driven by SetDeluxBarProgress, all inside a panel-outline frame. returns the
+        // fill's RectTransform so the caller can drive it.
+        public static RectTransform CreateDeluxBar(Transform parent, Rect rect, Color fillColour)
+        {
+            var trackGo = new GameObject("DeluxBar");
+            trackGo.transform.SetParent(parent, false);
+            SetPixelRect(trackGo.AddComponent<RectTransform>(), rect);
+            var trackImg = trackGo.AddComponent<Image>();
+            ApplyDeluxBase(trackImg, 3f);
+            trackImg.color = new Color(0f, 0f, 0f, 0.55f);
+
+            var fillGo = new GameObject("Fill");
+            fillGo.transform.SetParent(trackGo.transform, false);
+            var fillRt = fillGo.AddComponent<RectTransform>();
+            fillRt.anchorMin = new Vector2(0f, 0f);
+            fillRt.anchorMax = new Vector2(0f, 1f);
+            fillRt.pivot = new Vector2(0f, 0.5f);
+            fillRt.offsetMin = new Vector2(2f, 2f);
+            fillRt.offsetMax = new Vector2(-2f, -2f);
+            ApplyDeluxSkin(fillGo, fillGo.AddComponent<Image>(), fillColour, true, 3f);
+
+            var outGo = new GameObject("Outline");
+            outGo.transform.SetParent(trackGo.transform, false);
+            var oRt = outGo.AddComponent<RectTransform>();
+            oRt.anchorMin = Vector2.zero;
+            oRt.anchorMax = Vector2.one;
+            oRt.offsetMin = oRt.offsetMax = Vector2.zero;
+            var oImg = outGo.AddComponent<Image>();
+            ApplyDeluxPanelOutline(oImg, 3f);
+            oImg.raycastTarget = false;
+
+            return fillRt;
+        }
+
+        // driven by the right anchor rather than a width: reading the track's size would mean casting
+        // fill.parent to RectTransform, and the offsets are re-applied because moving an anchor makes
+        // Unity recompute them off the retained sizeDelta.
+        public static void SetDeluxBarProgress(RectTransform fill, float t)
+        {
+            if (fill == null) return;
+            fill.anchorMax = new Vector2(Mathf.Clamp01(t), 1f);
+            fill.offsetMin = new Vector2(2f, 2f);
+            fill.offsetMax = new Vector2(-2f, -2f);
         }
 
         // the delux look painted onto `img` + child layers on `go`: untinted black 9-slice base, a

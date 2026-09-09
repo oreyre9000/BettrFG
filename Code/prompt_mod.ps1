@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Silent
 )
 
@@ -60,6 +60,7 @@ $cbEpic  = New-Check 'Copy plugin to Epic' (Get-Saved 'Epic' $true)
 $cbDl    = New-Check 'Copy installer to Downloads' (Get-Saved 'Dl' $true)
 $cbKill  = New-Check 'Kill and relaunch Fall Guys' (Get-Saved 'Kill' $true)
 $cbEa    = New-Check 'Early access build' (Get-Saved 'Ea' $false)
+$cbMach  = New-Check 'Compile the machinima editor' (Get-Saved 'Mach' $false)
 
 $state = @{}
 $collectors = @()
@@ -96,18 +97,20 @@ $state['Epic']  = $cbEpic.Checked
 $state['Dl']    = $cbDl.Checked
 $state['Kill']  = $cbKill.Checked
 $state['Ea']    = $cbEa.Checked
+$state['Mach']  = $cbMach.Checked
 $state | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
 
 function B([bool]$v) { if ($v) { '1' } else { '0' } }
 
 $ea = B $cbEa.Checked
+$mach = B $cbMach.Checked
 
 if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
     $steam = B $cbSteam.Checked
     $epic  = B $cbEpic.Checked
     $dl    = B $cbDl.Checked
     $kill  = B $cbKill.Checked
-    Write-Output "BFGCHOICE:STEAM=$steam;EPIC=$epic;DL=$dl;KILL=$kill;EA=$ea;$modExtra"
+    Write-Output "BFGCHOICE:STEAM=$steam;EPIC=$epic;DL=$dl;KILL=$kill;EA=$ea;MACH=$mach;$modExtra"
 } else {
-    Write-Output "BFGCHOICE:STEAM=0;EPIC=0;DL=0;KILL=0;EA=$ea;$modExtra"
+    Write-Output "BFGCHOICE:STEAM=0;EPIC=0;DL=0;KILL=0;EA=$ea;MACH=$mach;$modExtra"
 }

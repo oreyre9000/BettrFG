@@ -166,10 +166,9 @@ namespace BetterFG.UI.Windows
                 () => BetterFGUIMan.BackdropOpacity,
                 v => { if (BetterFGUIMan.Instance != null) BetterFGUIMan.Instance.SetBackdropOpacity(v); },
                 v => v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), null, 1f);
-            BuildToggleRow(parent, "options.tab_switch_tooltip", ROW_EVEN,
-                () => SettingsService.Get(Tab.KEY_TAB_SWITCH_TOOLTIP, "true") == "true",
-                v => SettingsService.Set(Tab.KEY_TAB_SWITCH_TOOLTIP, v ? "true" : "false"));
-
+            BuildToggleRow(parent, "news.show_feed", ROW_EVEN,
+                () => NewsFeed.Enabled,
+                v => NewsFeed.SetEnabled(v));
             // ── Tab hover background ──────────────────────────────────────────
             // the faint pic behind a tab title on hover. optionally keep it visible always at a
             // low idle opacity, and tint it any colour (applies hovered or not).
@@ -194,7 +193,7 @@ namespace BetterFG.UI.Windows
             BuildSliderRow(parent, "ui.idle_opacity", ROW_ODD, 0f, 1f,
                 () => TabHoverStyle.IdleAlpha,
                 v => { TabHoverStyle.IdleAlpha = v; TabHoverStyle.Save(); TabHoverStyle.ApplyAll(); },
-                v => v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), null, 0.25f);
+                v => v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), null, 0.15f);
             BuildColorRow(parent, "options.tint", ROW_EVEN,
                 () => TabHoverStyle.Tint,
                 c => { TabHoverStyle.Tint = c; TabHoverStyle.Save(); TabHoverStyle.ApplyAll(); },
@@ -541,11 +540,11 @@ namespace BetterFG.UI.Windows
             // track the real current language) gets stripped right away in favor of setting it by hand.
             var codeLbl = UGUIShip.CreateStretchLabel(rowGo.transform, LocalizationService.CurrentLanguage, 12, Color.white);
             LocalizationService.Unbind(codeLbl);
-            codeLbl.text = LocalizationService.CurrentLanguage;
+            codeLbl.text = LocalizationService.DisplayName(LocalizationService.CurrentLanguage);
             var codeRt = codeLbl.GetComponent<RectTransform>();
             codeRt.anchorMin = codeRt.anchorMax = new Vector2(1f, 0.5f);
             codeRt.pivot = new Vector2(1f, 0.5f);
-            codeRt.sizeDelta = new Vector2(40f, ROW_H);
+            codeRt.sizeDelta = new Vector2(140f, ROW_H);
             codeRt.anchoredPosition = new Vector2(-(PAD + STEP + 4f), 0f);
 
             void Step(string glyph, float anchoredX, int delta)
@@ -561,11 +560,11 @@ namespace BetterFG.UI.Windows
                     .onClick.AddListener(new Action(() =>
                     {
                         LocalizationService.CycleLanguage(delta);
-                        codeLbl.text = LocalizationService.CurrentLanguage;
+                        codeLbl.text = LocalizationService.DisplayName(LocalizationService.CurrentLanguage);
                     }));
             }
             Step("-", -PAD, -1);
-            Step("+", -(PAD + STEP + 48f), +1);
+            Step("+", -(PAD + STEP + 148f), +1);
         }
 
         private static void BuildFontRow(RectTransform parent, Color bg)

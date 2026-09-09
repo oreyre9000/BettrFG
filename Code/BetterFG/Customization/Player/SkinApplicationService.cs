@@ -539,7 +539,7 @@ namespace BetterFG.Customization.Player
                 if (GameObjectHelper.IsLobbyCharacter(bean) || GameObjectHelper.IsUICharacter(bean))
                     StartCoroutine(ReapplyMenuBeanScaleCoroutine(bean).WrapToIl2Cpp());
                 if (bean == BeanMonitorService.LocalPlayerBean) continue;
-                PollAndReapplyCustomTextureForBean(bean);
+                TryAutoReapplyCustomTextureForBean(bean);
             }
         }
 
@@ -1749,6 +1749,7 @@ namespace BetterFG.Customization.Player
         {
             if (bean == null) return false;
             if (bean == BeanMonitorService.LocalPlayerBean) return false;
+            if (BeanMonitorService.IsForeignBean(bean)) return true;
             if (GameObjectHelper.IsLobbyCharacter(bean)) return false;
             if (GameObjectHelper.IsUICharacter(bean)) return false;
             if (bean.name == "LevelEditor_FallGuy(Clone)") return false;

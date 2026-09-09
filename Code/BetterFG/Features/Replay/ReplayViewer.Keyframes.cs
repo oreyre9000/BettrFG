@@ -87,7 +87,7 @@ namespace BetterFG.Features.Replay
 
             float h = rows * (ROW + 4f) + 4f;
             float x = Mathf.Min(cursor.x + 8f, _trackLeft + _trackWidth - MENU_W);
-            float y = Mathf.Min(cursor.y + 8f, TIMELINE_H - h);
+            float y = Mathf.Min(cursor.y + 8f, TimelineH - h);
             _contextMenu = UGUIShip.CreatePanel(_timelineRt, new Rect(x, y, MENU_W, h),
                 MENU_BG, "KeyframeMenu");
         }
@@ -144,6 +144,9 @@ namespace BetterFG.Features.Replay
         void DeleteSelected()
         {
             CloseContextMenu();
+#if MACHINIMA
+            DeleteSelectedKeys();
+#endif
             if (_selected.Count > 0)
             {
                 int gone = 0;

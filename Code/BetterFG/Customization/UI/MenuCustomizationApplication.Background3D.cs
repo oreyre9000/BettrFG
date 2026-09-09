@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -72,13 +72,30 @@ namespace BetterFG.Customization.UI
             }
         }
 
-        private static string _bg3dSkyboxIdSet;
-        private static float _bg3dSkyboxIssuedAt;
-        private static int _bg3dReassertGen;
+        private static bool _bg3dRequestPending;
+
+        private static void RequestBaseSkybox(string wantId)
+        {
+            var handler = FindMenuBackgroundVm()?._skyboxHandler;
+            if (wantId == null || handler == null || _bg3dRequestPending) return;
+            if (handler._loadedSkyboxId == wantId) return;
+            _bg3dRequestPending = true;
+            Instance?.StartCoroutine(IssueBaseSkybox(wantId).WrapToIl2Cpp());
+        }
+
+        private static IEnumerator IssueBaseSkybox(string wantId)
+        {
+            yield return null;
+            var handler = FindMenuBackgroundVm()?._skyboxHandler;
+            if (handler != null && handler._loadedSkyboxId != wantId) handler.SetSkybox(wantId);
+            _bg3dRequestPending = false;
+        }
+
         private bool _bg3dOverrideActive;
         private Coroutine _bg3dApplyRoutine;
         private int _bg3dGen;
         private string _bg3dLoadingBundle;
+        private static Material _bg3dSkyboxMat;
 
         public void RequestMenuBackground3D(string id)
         {
@@ -134,10 +151,9 @@ namespace BetterFG.Customization.UI
                     var def = BetterFG.Features.CustomBackgrounds.Definers.ByBundle(bundle);
                     string wantId = def.HasValue ? MenuBaseForDefiner(def.Value) : NativeIdForBundle(bundle);
 
-                    if (wantId != null && live._skyboxHandler != null && live._skyboxHandler._loadedSkyboxId != wantId)
-                        live._skyboxHandler.SetSkybox(wantId);
+                    RequestBaseSkybox(wantId);
 
-                    HideBaseCutout();
+                    ReapplyBg3dOverrides();
                     ApplyPatternFromSettings();
                     ApplyGradientFromSettings();
                     return;
@@ -162,8 +178,7 @@ namespace BetterFG.Customization.UI
                 RestoreBg3dEnv();
                 if (vm.CanShow3DBackground && vm._mainMenuBackground != null)
                 {
-                    vm._skyboxHandler?.SetSkybox(vm._mainMenuBackground.BackgroundName);
-                    _bg3dSkyboxIdSet = vm._mainMenuBackground.BackgroundName;
+                    RequestBaseSkybox(vm._mainMenuBackground.BackgroundName);
                 }
                 else vm.Show3DBackground = false;
                 _bg3dOverrideActive = false;
@@ -180,14 +195,10 @@ namespace BetterFG.Customization.UI
                 }
                 else
                 {
-                    var handler = vm._skyboxHandler;
-                    bool inFlight = _bg3dSkyboxIdSet == id && Time.realtimeSinceStartup - _bg3dSkyboxIssuedAt < 3f;
-                    if (handler != null && handler._loadedSkyboxId != id && !inFlight)
+                    if (vm._skyboxHandler._loadedSkyboxId != id)
                     {
                         RestoreBg3dEnv();
-                        handler.SetSkybox(id);
-                        _bg3dSkyboxIdSet = id;
-                        _bg3dSkyboxIssuedAt = Time.realtimeSinceStartup;
+                        RequestBaseSkybox(id);
                     }
                     _bg3dOverrideActive = true;
                 }
@@ -216,43 +227,96 @@ namespace BetterFG.Customization.UI
         private static Color _bg3dPrevFogColor;
         private static float _bg3dPrevReflection;
         private static UnityEngine.Rendering.AmbientMode _bg3dPrevAmbientMode;
-        private static Transform _bg3dHiddenLighting;
-        private static Transform _bg3dHiddenCutout;
+        private static readonly List<GameObject> _bg3dHiddenBaseParts = new List<GameObject>();
 
-        private static void HideBaseCutout()
+        private static void HideBaseParts(Transform root, bool hideLighting)
         {
-            if (_bg3dHiddenCutout != null) return;
-            var sky = FindMenuBackgroundVm()?._skyboxHandler?.Skybox;
-            if (sky == null) return;
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name != "CutoutSphere" && !(hideLighting && t.name == "LIGHTING")) continue;
+                if (!t.gameObject.activeSelf) continue;
+                t.gameObject.SetActive(false);
+                _bg3dHiddenBaseParts.Add(t.gameObject);
+            }
+        }
 
-            _bg3dHiddenCutout = sky.transform.Find("CutoutSphere");
-            _bg3dHiddenCutout.gameObject.SetActive(false);
+        internal static void OnBaseLightingApplied(GameObject root)
+        {
+            if (!BetterFG.Utilities.GameObjectHelper.IsMainMenuUp()) return;
+            if (root.transform.parent != null || !root.name.StartsWith("Background_") || !root.name.EndsWith("(Clone)")) return;
+            ReapplyBg3dOverrides(root);
+            Instance?.ApplyPatternFromSettings();
+            Instance?.ApplyGradientFromSettings();
+        }
+
+        internal static void RewriteBaseSkyboxId(ref string skyboxId)
+        {
+            if (!BetterFG.Utilities.GameObjectHelper.IsMainMenuUp()) return;
+
+            if (SettingsService.Get(KEY_BG3D_MODE, "native") == "custom")
+            {
+                if (_customBg3d == null) return;
+                var definer = BetterFG.Features.CustomBackgrounds.Definers.ByBundle(_customBg3d.name);
+                string wantId = definer.HasValue ? MenuBaseForDefiner(definer.Value) : NativeIdForBundle(_customBg3d.name);
+                if (wantId != null) skyboxId = wantId;
+                return;
+            }
+
+            string selected = SettingsService.Get(KEY_BG3D_SELECTED, "");
+            if (!string.IsNullOrEmpty(selected)) skyboxId = selected;
+        }
+
+        private static int _bg3dPollGen;
+
+        internal static void StartBg3dPoll()
+        {
+            Instance?.StartCoroutine(Bg3dPollLoop(++_bg3dPollGen).WrapToIl2Cpp());
+        }
+
+        private static IEnumerator Bg3dPollLoop(int gen)
+        {
+            while (gen == _bg3dPollGen && BetterFG.Utilities.GameObjectHelper.IsMainMenuUp())
+            {
+                if (_customBg3d == null && SettingsService.Get(KEY_BG3D_MODE, "native") == "custom")
+                    Instance?.ApplyMenuBackground3DFromSettings();
+                else
+                    ReapplyBg3dOverrides();
+                yield return new WaitForSeconds(0.25f);
+            }
+        }
+
+        internal static void ReapplyBg3dOverrides(GameObject root = null)
+        {
+            if (!BetterFG.Utilities.GameObjectHelper.IsMainMenuUp()) return;
+
+            if (_customBg3d != null && SettingsService.Get(KEY_BG3D_MODE, "native") == "custom")
+            {
+                var definer = BetterFG.Features.CustomBackgrounds.Definers.ByBundle(_customBg3d.name);
+                string wantId = definer.HasValue ? MenuBaseForDefiner(definer.Value) : NativeIdForBundle(_customBg3d.name);
+                var bg = root != null ? root : GameObject.Find(wantId + "(Clone)");
+
+                if (bg != null && bg.name == wantId + "(Clone)")
+                {
+                    HideBaseParts(bg.transform, definer.HasValue && definer.Value.HideLighting);
+                    if (definer.HasValue) ApplyDefinerOverrides(definer.Value, _bg3dSkyboxMat);
+                }
+                else RequestBaseSkybox(wantId);
+            }
+
+            Instance?.ApplyAmbientFromSettings();
+            Instance?.ApplySunFromSettings();
         }
 
         internal static void ForgetBg3dEnv()
         {
             _bg3dEnvSaved = false;
-            _bg3dSkyboxIdSet = null;
+            _bg3dHiddenBaseParts.Clear();
         }
 
-        // the game reassigns its own background on view switches, and not always on the frame the
-        // switch happens — so re-assert across a window instead of once. _loadedSkyboxId is what
-        // decides whether a SetSkybox actually goes out, so the extra passes never spawn a clone.
         internal static void ReassertMenuBackground3D()
         {
             if (!BetterFG.Utilities.GameObjectHelper.IsMainMenuUp()) return;
-            _bg3dSkyboxIdSet = null;
-            Instance?.StartCoroutine(ReassertBg3dWindow(++_bg3dReassertGen).WrapToIl2Cpp());
-        }
-
-        private static IEnumerator ReassertBg3dWindow(int gen)
-        {
-            for (int i = 0; i < 12 && gen == _bg3dReassertGen; i++)
-            {
-                yield return new WaitForSeconds(0.1f);
-                if (!BetterFG.Utilities.GameObjectHelper.IsMainMenuUp()) yield break;
-                Instance?.ApplyMenuBackground3DFromSettings();
-            }
+            Instance?.ApplyMenuBackground3DFromSettings();
         }
 
         private static string MenuBaseForDefiner(BetterFG.Features.CustomBackgrounds.Definers.Entry e)
@@ -296,11 +360,9 @@ namespace BetterFG.Customization.UI
 
         private static void RestoreBg3dEnv()
         {
-            if (_bg3dHiddenLighting != null) _bg3dHiddenLighting.gameObject.SetActive(true);
-            _bg3dHiddenLighting = null;
-
-            if (_bg3dHiddenCutout != null) _bg3dHiddenCutout.gameObject.SetActive(true);
-            _bg3dHiddenCutout = null;
+            foreach (var go in _bg3dHiddenBaseParts)
+                if (go != null) go.SetActive(true);
+            _bg3dHiddenBaseParts.Clear();
 
             if (!_bg3dEnvSaved) return;
             RenderSettings.skybox = _bg3dPrevSkybox;
@@ -314,13 +376,8 @@ namespace BetterFG.Customization.UI
         private static void ApplyDefinerOverrides(BetterFG.Features.CustomBackgrounds.Definers.Entry e, Material skyboxMat)
         {
             if (skyboxMat != null) RenderSettings.skybox = skyboxMat;
-            if (!e.HideLighting || _bg3dHiddenLighting != null) return;
+            if (!e.HideLighting) return;
 
-            var sky = FindMenuBackgroundVm()?._skyboxHandler?.Skybox;
-            if (sky == null) return;
-
-            _bg3dHiddenLighting = sky.transform.Find("LIGHTING");
-            _bg3dHiddenLighting.gameObject.SetActive(false);
             RenderSettings.reflectionIntensity = 0f;
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
         }
@@ -385,14 +442,9 @@ namespace BetterFG.Customization.UI
                 if (vm != null)
                 {
                     DestroyStrayBackgroundClones(vm._skyboxHandler?.Skybox);
-                    if (nativeId != null)
-                    {
-                        vm._skyboxHandler?.SetSkybox(nativeId);
-                        _bg3dSkyboxIdSet = nativeId;
-                    }
+                    if (nativeId != null) RequestBaseSkybox(nativeId);
                     else
                     {
-                        _bg3dSkyboxIdSet = null;
                         vm._skyboxHandler?.ForceStopLoadingCoroutine();
                         vm._skyboxHandler?.ForceClearLoadedSkybox();
                         Plugin.Log.LogInfo($"{bundle} has no matching game background, terrain goes on the default sky");
@@ -401,6 +453,29 @@ namespace BetterFG.Customization.UI
 
                 _customBg3d = Instantiate(prefab);
                 _customBg3d.name = bundle;
+                if (bundle == "terrain_s5")
+                {
+                    _customBg3d.transform.position = new Vector3(180.6322f, -184.2911f, 255.3165f);
+                    _customBg3d.transform.eulerAngles = new Vector3(351.9116f, 0f, 0f);
+                }
+                else if (bundle == "terrain_s4")
+                {
+                    _customBg3d.transform.position = new Vector3(40.3547f, -9.0254f, 161.61f);
+                    _customBg3d.transform.eulerAngles = new Vector3(352.0271f, 0f, 0f);
+                    _customBg3d.transform.localScale = Vector3.one;
+                    Object.Destroy(_customBg3d.transform.Find("Clouds_GRP3/ENV_RoundCloud_Large01").gameObject);
+                    foreach (var light in _customBg3d.GetComponentsInChildren<Light>(true))
+                        Object.Destroy(light);
+                    foreach (var probe in _customBg3d.GetComponentsInChildren<ReflectionProbe>(true))
+                        Object.Destroy(probe);
+                }
+                else if (bundle.StartsWith("terrain_beta"))
+                {
+                    _customBg3d.transform.localPosition = bundle == "terrain_beta_night"
+                        ? BetterFG.Features.CustomBackgrounds.Definers.NightTerrainSpawn
+                        : new Vector3(-7.4413f, 135.4576f, 108.0769f);
+                    _customBg3d.transform.Find("Plane").gameObject.SetActive(false);
+                }
                 _customBg3d.SetActive(true);
                 _bg3dOverrideActive = true;
 
@@ -408,12 +483,8 @@ namespace BetterFG.Customization.UI
                 ApplyGradientFromSettings();
                 Plugin.Log.LogInfo($"menu backdrop {bundle} up, base {nativeId ?? "none"}");
 
-                for (int i = 0; i < 10 && gen == _bg3dGen; i++)
-                {
-                    HideBaseCutout();
-                    if (definer.HasValue) ApplyDefinerOverrides(definer.Value, skyboxMat);
-                    yield return new WaitForSeconds(0.12f);
-                }
+                _bg3dSkyboxMat = skyboxMat;
+                ReapplyBg3dOverrides();
             }
             finally
             {

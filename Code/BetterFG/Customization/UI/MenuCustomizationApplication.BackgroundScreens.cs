@@ -269,18 +269,7 @@ namespace BetterFG.Customization.UI
             ApplyMenuBackground3DFromSettings();
             ApplyPatternFromSettings();
             ApplyGradientFromSettings();
-
-            // game re-runs its own scene lighting setup a bit into the menu and stomps our ambient
-            // (and can reassign the CMS 3D background out from under us). coming back from a game the
-            // scene takes longer to settle than a single 0.1s window, so reassert a handful of times
-            // over ~1s to win the race regardless of how late it lands.
-            for (int i = 0; i < 8; i++)
-            {
-                yield return new WaitForSeconds(0.12f);
-                ApplyAmbientFromSettings();
-                ApplyMenuBackground3DFromSettings();
-                ApplyGradientFromSettings();
-            }
+            StartBg3dPoll();
         }
 
         // ── Menu background image ─────────────────────────────────────────────
@@ -536,11 +525,17 @@ namespace BetterFG.Customization.UI
 
         // MainMenuBackgroundViewModel fades the Backdrop image's alpha to swap between the 3D
         // environment and the flat 2D background, per screen. we only ever own rgb + the sprite;
-        // reading its live alpha keeps the pattern in step without us guessing which screens get 3D.
-        private static float LiveBackdropAlpha()
+        // Backdrop is the only image the game fades, so Circles has to follow it or the pattern
+        // stays up over the 3D background after the 2D one is gone.
+        private static UnityEngine.UI.Image _patternImg;
+        private static UnityEngine.UI.Image _patternBackdropImg;
+        private static Color _patternBaseColour = Color.white;
+
+        internal static void SyncPatternAlpha()
         {
-            var img = GameObject.Find(FGUI_ORIGINAL_BACKDROP_PATH)?.GetComponent<UnityEngine.UI.Image>();
-            return img != null ? img.color.a : 1f;
+            float a = _patternBaseColour.a * _patternBackdropImg.color.a;
+            if (Mathf.Approximately(_patternImg.color.a, a)) return;
+            _patternImg.color = new Color(_patternBaseColour.r, _patternBaseColour.g, _patternBaseColour.b, a);
         }
 
         public void ApplyPatternFromSettings()
@@ -565,8 +560,12 @@ namespace BetterFG.Customization.UI
                 mat.SetTexture("_Pattern", tex);
             }
 
-            var pc = ScreenBackgroundService.PatternColor(ScreenBackgroundService.Screen.FallForce);
-            img.color = new Color(pc.r, pc.g, pc.b, pc.a * LiveBackdropAlpha());
+            _patternImg = img;
+            _patternBackdropImg = circlesGo.transform.parent.Find("Backdrop").GetComponent<UnityEngine.UI.Image>();
+            _patternBaseColour = ScreenBackgroundService.PatternColor(ScreenBackgroundService.Screen.FallForce);
+            if (circlesGo.GetComponent<BetterFG.Patches.MenuPatternAlphaMirror>() == null)
+                circlesGo.AddComponent<BetterFG.Patches.MenuPatternAlphaMirror>();
+            SyncPatternAlpha();
         }
 
         public void RestorePattern()
@@ -581,6 +580,9 @@ namespace BetterFG.Customization.UI
 
             var mat = EnsureCirclesMaterialInstance(img);
             if (mat == null) return;
+            var mirror = circlesGo.GetComponent<BetterFG.Patches.MenuPatternAlphaMirror>();
+            if (mirror != null) Destroy(mirror);
+
             mat.SetTexture("_Pattern", _originalPatternTex);
             img.color = _originalCirclesColor;
 

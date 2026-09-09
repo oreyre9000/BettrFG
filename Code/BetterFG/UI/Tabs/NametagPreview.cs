@@ -89,7 +89,7 @@ namespace BetterFG.UI.Tabs
 
             CrownRankService.InvalidateCache();
             tmp.text = PreviewName();
-            _previewCanvas.SetCrownRankByCrownsEarned(crownCfg.enabled ? 1 : 0);
+            CrownRankService.SetCrownRankSafe(_previewCanvas, crownCfg.enabled ? 1 : 0);
 
             NametagIconApplicator.ApplyNametagTo(_previewCanvas, nameCfg);
             CrownRankService.ApplyCrownTo(_previewCanvas, crownCfg);

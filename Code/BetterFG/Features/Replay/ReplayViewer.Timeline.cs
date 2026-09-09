@@ -31,6 +31,38 @@ namespace BetterFG.Features.Replay
 {
     public partial class ReplayViewer
     {
+#if MACHINIMA
+        public bool Machinima => _rec != null && _rec.isMachinima;
+
+        float PlayerLanesH =>
+            Machinima && _solo == null ? VisiblePlayerRows * (LANE_H + LANE_GAP) : 0f;
+#else
+        public bool Machinima => false;
+
+        float PlayerLanesH => 0f;
+#endif
+
+        ReplayPlayer _solo;
+
+        float PlayerLanesTop => LANES_Y + LANE_COUNT * (LANE_H + LANE_GAP);
+
+        float PlayerLanesBottom => LANES_BOTTOM + PlayerLanesH;
+
+        float ZoomBarY => ZOOMBAR_Y + PlayerLanesH;
+
+        float TimelineH => TIMELINE_H + PlayerLanesH;
+
+        string LaneName(int lane)
+        {
+#if MACHINIMA
+            if (_solo != null)
+                return lane == LANE_COUNT - 1 ? "machinima.lane_action"
+                    : lane == LANE_COUNT - 2 ? "machinima.lane_movement" : "";
+#endif
+            return lane == LANE_COUNT - 1 ? "ui.camera"
+                : lane == LANE_COUNT - 2 ? "ui.lane_postfx" : "ui.lane_visibility";
+        }
+
         void BuildWindow()
         {
             var win = UGUIShip.CreatePanel(_canvas.transform, new Rect(MARGIN, MARGIN, WIN_W, WIN_H), Color.clear, "ReplayWindow");
@@ -80,13 +112,13 @@ namespace BetterFG.Features.Replay
         void BuildTimeline()
         {
             float w = UIScaleService.CurrentRef.x - MARGIN * 2f;
-            var bar = UGUIShip.CreatePanel(_canvas.transform, new Rect(0f, 0f, w, TIMELINE_H), Color.clear, "ReplayTimeline");
+            var bar = UGUIShip.CreatePanel(_canvas.transform, new Rect(0f, 0f, w, TimelineH), Color.clear, "ReplayTimeline");
             _timelineRt = bar;
             bar.anchorMin = new Vector2(0f, 0f);
             bar.anchorMax = new Vector2(0f, 0f);
             bar.pivot = new Vector2(0f, 0f);
             bar.anchoredPosition = new Vector2(MARGIN, TIMELINE_Y);
-            bar.sizeDelta = new Vector2(w, TIMELINE_H);
+            bar.sizeDelta = new Vector2(w, TimelineH);
             BuildTimelineBackdrop(bar, w);
 
             _playLabel = UGUIShip.CreateLabel(bar, new Rect(PAD, PAD, 200f, HEADER_H), "", UIScale.FS_SM, HINT);
@@ -111,20 +143,26 @@ namespace BetterFG.Features.Replay
             var rulerGo = new GameObject("RulerTicks");
             _rulerRoot = rulerGo.AddComponent<RectTransform>();
             _rulerRoot.SetParent(bar, false);
-            UGUIShip.SetPixelRect(_rulerRoot, new Rect(0f, 0f, w, TIMELINE_H));
+            UGUIShip.SetPixelRect(_rulerRoot, new Rect(0f, 0f, w, TimelineH));
             _rulerLabels.Clear();
             _rulerTicks.Clear();
+            _minorTicks.Clear();
             RefreshRuler();
 
             for (int i = 0; i < LANE_COUNT; i++)
             {
                 float y = LANES_Y + i * (LANE_H + LANE_GAP);
-                UGUIShip.CreatePanel(bar, new Rect(_trackLeft, y, trackW, LANE_H), LANE_BG, "Lane").GetComponent<Image>().raycastTarget = false;
+                string name = LaneName(i);
+                if (string.IsNullOrEmpty(name)) continue;
 
-                string name = i == LANE_COUNT - 1 ? "ui.camera" : i == LANE_COUNT - 2 ? "ui.lane_postfx" : "ui.lane_visibility";
+                UGUIShip.CreatePanel(bar, new Rect(_trackLeft, y, trackW, LANE_H), LANE_BG, "Lane").GetComponent<Image>().raycastTarget = false;
                 UGUIShip.CreateLabel(bar, new Rect(PAD, y, LANE_NAME_W - 6f, LANE_H),
                     name, UIScale.FS_SM - 1, HINT, TextAnchor.MiddleRight);
             }
+
+#if MACHINIMA
+            BuildMachinimaLanes(bar, w, trackW);
+#endif
 
             _dimLeft = UGUIShip.CreatePanel(bar, new Rect(_trackLeft, LANES_Y, 0f, LANES_H), OUTSIDE_DIM, "OutsideLeft");
             _dimLeft.GetComponent<Image>().raycastTarget = false;
@@ -152,11 +190,11 @@ namespace BetterFG.Features.Replay
             _fxTicks.SetParent(bar, false);
             UGUIShip.SetPixelRect(_fxTicks, new Rect(0f, 0f, w, LANES_BOTTOM));
 
-            var zoomTrackBg = UGUIShip.CreatePanel(bar, new Rect(_trackLeft, ZOOMBAR_Y, trackW, ZOOMBAR_H),
+            var zoomTrackBg = UGUIShip.CreatePanel(bar, new Rect(_trackLeft, ZoomBarY, trackW, ZOOMBAR_H),
                 new Color(0f, 0f, 0f, 0.2f), "ZoomTrack");
             zoomTrackBg.GetComponent<Image>().raycastTarget = false;
 
-            var zoomFill = UGUIShip.CreateButton(bar, new Rect(_trackLeft, ZOOMBAR_Y, trackW, ZOOMBAR_H),
+            var zoomFill = UGUIShip.CreateButton(bar, new Rect(_trackLeft, ZoomBarY, trackW, ZOOMBAR_H),
                 "", new Color(EDGE_BLUE.r, EDGE_BLUE.g, EDGE_BLUE.b, 0.85f), Color.clear, 1, null, skipHoverSound: true, customSprite: true);
             _zoomFillRt = zoomFill.GetComponent<RectTransform>();
             zoomFill.GetComponent<Image>().raycastTarget = false;
@@ -190,7 +228,7 @@ namespace BetterFG.Features.Replay
                 _timelineBg.hideFlags = HideFlags.HideAndDontSave;
             }
 
-            var rt = UGUIShip.CreatePanel(bar, new Rect(0f, -BG_OVERHANG, w, TIMELINE_H + BG_OVERHANG), Color.white, "Backdrop");
+            var rt = UGUIShip.CreatePanel(bar, new Rect(0f, -BG_OVERHANG, w, TimelineH + BG_OVERHANG), Color.white, "Backdrop");
             var img = rt.GetComponent<Image>();
             img.sprite = _timelineBg;
             img.type = Image.Type.Sliced;
@@ -380,7 +418,7 @@ namespace BetterFG.Features.Replay
             float rightF = Mathf.Clamp01((_viewStart + ViewSpan) / duration);
             float left = _trackLeft + _trackWidth * leftF;
             float width = Mathf.Max(_trackWidth * (rightF - leftF), 4f);
-            UGUIShip.SetPixelRect(_zoomFillRt, new Rect(left, ZOOMBAR_Y, width, ZOOMBAR_H));
+            UGUIShip.SetPixelRect(_zoomFillRt, new Rect(left, ZoomBarY, width, ZOOMBAR_H));
         }
 
         void ZoomTimeline(float notches, float pivot)
@@ -602,6 +640,10 @@ namespace BetterFG.Features.Replay
             if (Input.GetMouseButtonDown(0)) _timelineFocused = OverTimeline(cursor);
             float time = TimeAt(cursor.x);
 
+#if MACHINIMA
+            if (Machinima && HandleMachinimaDrag()) return true;
+#endif
+
             if (_dragFxKeyframe != null)
             {
                 if (Input.GetMouseButton(0))
@@ -794,6 +836,14 @@ namespace BetterFG.Features.Replay
                 return false;
             }
 
+#if MACHINIMA
+            if (Machinima)
+            {
+                if (_solo != null) return HandleSoloRows(cursor, time);
+                if (cursor.y >= PlayerLanesTop && cursor.y < PlayerLanesBottom) return HandlePlayerLaneRow(cursor, time);
+            }
+#endif
+
             if (OverVisRow(cursor)) return HandleVisibilityKeyRow(cursor, time);
             if (OverFxRow(cursor)) return HandleFxKeyRow(cursor, time);
             if (!OverCameraRow(cursor)) return false;
@@ -983,9 +1033,16 @@ namespace BetterFG.Features.Replay
             _selected.Clear();
             _selectedVis.Clear();
             _selectedFx.Clear();
+#if MACHINIMA
+            _selKeys.Clear();
+#endif
             ReplayKeyframeWindow.Instance?.Close();
             ReplayVisibilityKeyframeWindow.Instance?.Close();
             ReplayPostFxKeyframeWindow.Instance?.Close();
+#if MACHINIMA
+            MachinimaKeyWindow.Instance?.Close();
+            MachinimaPlayerWindow.Instance?.Close();
+#endif
         }
 
         void BeginMarqueeVis(Vector2 cursor)

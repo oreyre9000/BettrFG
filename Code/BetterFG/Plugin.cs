@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using BetterFG.Core;
@@ -14,6 +14,7 @@ using BetterFG.UI.SideWheel;
 using BetterFG.UI.Tabs;
 using BetterFG.UI.Windows;
 using BetterFG.Customization.UI;
+using BetterFG.Features.Assets;
 using BetterFG.Features.UnityRound;
 using BetterFG.Features.UnityRound.Behaviours;
 using BetterFG.Features.QualificationTime;
@@ -48,6 +49,9 @@ namespace BetterFG
             BetterFGConfig.Init();
             AudioService.Init();
             LocalizationService.Init();
+            BetterFG.Tweaks.StartupTitleScreenTweak.ForceOn =
+                SettingsService.Get(BetterFG.UI.BetterFGStartupWindow.KEY_SEEN, "false") != "true"
+                || SettingsService.Get(BetterFG.Features.Onboarding.OnboardingController.KEY_SEEN, "false") != "true";
             MenuMusicService.Init();
             DiscordPresenceService.Init();
 
@@ -89,7 +93,8 @@ namespace BetterFG
 
             InitCompBuild();
             InitGameObjects(0);
-            BetterFGStartupWindow.Show();
+            if (BetterFGStartupWindow.Show() == null)
+                BetterFG.Features.Onboarding.OnboardingController.StartupDone = true;
             BetterFGUpdateWindow.Show();
             SidewheelRegistry.RegisterAll(SideWheelManager.Create());
         }
@@ -181,6 +186,8 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<AlphaPulseContinuousFade>();
             ClassInjector.RegisterTypeInIl2Cpp<HollowCirclePulse>();
             ClassInjector.RegisterTypeInIl2Cpp<HollowBoxPulse>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Onboarding.PromptHost>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Assets.UnityProjectPrompt>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Onboarding.OnboardingController>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Onboarding.HelpPrompt>();
             ClassInjector.RegisterTypeInIl2Cpp<MoveScrollUvRaw>();
@@ -191,10 +198,15 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<SideWheelManager>();
             ClassInjector.RegisterTypeInIl2Cpp<RingHoleGraphic>();
             ClassInjector.RegisterTypeInIl2Cpp<AutoFetchTrigger>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Patches.MenuPatternAlphaMirror>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Patches.ShowSelectorBgApplier>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Patches.CreativeEditorBgApplier>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Nametag.GifAnimator>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Replay.ReplayViewer>();
+#if MACHINIMA
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Replay.MachinimaLevelPrompt>();
+#endif
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Customization.Player.BeanCreatorScreen>();
 
             // tabs
             ClassInjector.RegisterTypeInIl2Cpp<SwitchTab>();
@@ -220,6 +232,8 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<CustomSkinTextureTab>();
             ClassInjector.RegisterTypeInIl2Cpp<SkinTextureWizardTab>();
             ClassInjector.RegisterTypeInIl2Cpp<SkinTextureMaterialPropsTab>();
+            ClassInjector.RegisterTypeInIl2Cpp<AssetsTab>();
+            ClassInjector.RegisterTypeInIl2Cpp<AssetsScreen>();
             ClassInjector.RegisterTypeInIl2Cpp<AllCosmeticsTab>();
             ClassInjector.RegisterTypeInIl2Cpp<AllCosmeticsWizardTab>();
             ClassInjector.RegisterTypeInIl2Cpp<CreativeTab>();
@@ -234,7 +248,6 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<RepoSelectorTab>();
             ClassInjector.RegisterTypeInIl2Cpp<PetsTab>();
             ClassInjector.RegisterTypeInIl2Cpp<PetWizardTab>();
-            ClassInjector.RegisterTypeInIl2Cpp<PetLookPickerTab>();
             ClassInjector.RegisterTypeInIl2Cpp<PetSkinTextureTab>();
             ClassInjector.RegisterTypeInIl2Cpp<PetPhrasesTab>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Customization.Pets.PetService>();
@@ -329,6 +342,7 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<NotifyRoundStartTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<UpcomingShowsTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<RandomShowSelectTweak>();
+            ClassInjector.RegisterTypeInIl2Cpp<RetroGoopMaterialsTweak>();
             //ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.WinStreakDebug.WinStreakDebugService>();
         }
 
@@ -400,6 +414,7 @@ namespace BetterFG
             BetterFGTabRegistry.Register<EmoticonsPhrasesTab>();
             BetterFGTabRegistry.Register<FeaturesTab>();
             BetterFGTabRegistry.Register<CustomSkinTextureTab>();
+            BetterFGTabRegistry.Register<AssetsTab>();
             BetterFGTabRegistry.Register<AllCosmeticsTab>();
             BetterFGTabRegistry.Register<CreativeTab>();
             BetterFGTabRegistry.Register<PersonalBestTab>();
@@ -409,7 +424,6 @@ namespace BetterFG
 
             BetterFGTabRegistry.RegisterPartialTab<UIBackgroundTab>();
             BetterFGTabRegistry.RegisterPartialTab<PetWizardTab>();
-            BetterFGTabRegistry.RegisterPartialTab<PetLookPickerTab>();
             BetterFGTabRegistry.RegisterPartialTab<PetSkinTextureTab>();
             BetterFGTabRegistry.RegisterPartialTab<PetPhrasesTab>();
             BetterFGTabRegistry.RegisterPartialTab<UIFontTab>();

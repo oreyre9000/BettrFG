@@ -107,6 +107,8 @@
 	         a build the window says is a normal one. -->
 	    <DefineConstants Condition="$(BettrFGPromptOut.Contains('EA=1'))">$(DefineConstants);EARLYACESSS</DefineConstants>
 	    <DefineConstants Condition="$(BettrFGPromptOut.Contains('EA=0'))">$(DefineConstants.Replace('EARLYACESSS', ''))</DefineConstants>
+	    <DefineConstants Condition="$(BettrFGPromptOut.Contains('MACH=1'))">$(DefineConstants);MACHINIMA</DefineConstants>
+	    <DefineConstants Condition="$(BettrFGPromptOut.Contains('MACH=0'))">$(DefineConstants.Replace('MACHINIMA', ''))</DefineConstants>
 	  </PropertyGroup>
 	  <Message Importance="high" Text="BettrFG build choices: $(BettrFGPromptOut)" />
 	</Target>
@@ -185,6 +187,10 @@
     <DefineConstants>$(DefineConstants);PROFILES</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Machinima)' == 'true'">
+    <DefineConstants>$(DefineConstants);MACHINIMA</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)' == 'EarlyAcesss'">
     <DefineConstants>$(DefineConstants);EARLYACESSS</DefineConstants>
   </PropertyGroup>
@@ -206,6 +212,7 @@
     <EmbeddedResource Include="assets\**\*.wav" />
     <EmbeddedResource Include="assets\**\*.ttf" />
     <EmbeddedResource Include="assets\bundles\*" />
+    <EmbeddedResource Include="assets\**\*.py" />
   </ItemGroup>
 
   <ItemGroup>

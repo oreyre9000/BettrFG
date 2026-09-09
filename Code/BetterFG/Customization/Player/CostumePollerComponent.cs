@@ -75,9 +75,6 @@ namespace BetterFG.Customization.Player
 
         void Start() => HideBeans();
 
-        // the game re-composites a bean's costume whenever its loadout screen redraws, which
-        // respawns costume meshes under GEO. FallguyCustomisationHandler's visibility pass is the
-        // tail of that, so it's where we get the last word back.
         public static void RehideForBean(int beanId)
         {
             for (int i = Live.Count - 1; i >= 0; i--)
@@ -95,43 +92,14 @@ namespace BetterFG.Customization.Player
             else HideLocalBeans();
         }
 
-        // a child we disable can be switched back on by anything: the game's own LOD pass, a costume
-        // re-composite, our own restore path. rather than guess which, the child carries a guard that
-        // turns itself back off the moment Unity re-enables it, and self-destructs once the costume
-        // clone that wanted it hidden is gone.
         private void Guard(Transform child)
         {
             if (child.gameObject.GetComponent<BaseBodyGuard>() != null) return;
             child.gameObject.AddComponent<BaseBodyGuard>().owner = skinClone;
         }
 
-        // For remote beans: find all children that should be hidden.
-        // Keep the FIRST Body_LOD child alive (bones depend on its SMR) but make it fully invisible.
-        // Everything else matching the hide filter also gets invisible materials.
         private void HideRemoteBeans()
         {
-            // prefer Body_LOD0 as donor; disable all other matching children
-            Transform boneDonor = null;
-            for (int i = 0; i < beanGEO.childCount; i++)
-            {
-                Transform child = beanGEO.GetChild(i).Cast<Transform>();
-                if (child == null) continue;
-                if (child.gameObject == skinClone) continue;
-                if (!ShouldHide(child.name)) continue;
-                if (child.name.Contains("Body_LOD0")) { boneDonor = child; break; }
-            }
-            if (boneDonor == null)
-            {
-                for (int i = 0; i < beanGEO.childCount; i++)
-                {
-                    Transform child = beanGEO.GetChild(i).Cast<Transform>();
-                    if (child == null) continue;
-                    if (child.gameObject == skinClone) continue;
-                    if (!ShouldHide(child.name)) continue;
-                    if (child.name.Contains("Body_LOD")) { boneDonor = child; break; }
-                }
-            }
-
             for (int i = 0; i < beanGEO.childCount; i++)
             {
                 Transform child = beanGEO.GetChild(i).Cast<Transform>();
@@ -139,9 +107,8 @@ namespace BetterFG.Customization.Player
                 if (child.gameObject == skinClone) continue;
                 if (!ShouldHide(child.name)) continue;
 
-                if (boneDonor != null && child == boneDonor)
+                if (child.name.Contains("Body_LOD"))
                 {
-                    if (!child.gameObject.activeSelf) child.gameObject.SetActive(true);
                     MakeInvisible(child);
                 }
                 else

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -22,8 +22,13 @@ namespace BetterFG.Features.NeonMaterial
         private const float ShellGrow = 1.01f;
 
         private static readonly int[] ColorIds = IdentifierObjects.ColourPropertyIds;
+        private const string ScalingShaderName = "Amplify/VFX_MatchFall_Unlit_Fresnel_ManualScaling";
+        private static readonly int TextureId = Shader.PropertyToID("_Texture");
+        private static readonly int WorldScaleId = Shader.PropertyToID("_WorldScale");
+        private static Shader _scalingShader;
 
         private static readonly HashSet<int> _wantNeon = new HashSet<int>();
+        private static readonly HashSet<int> _lit = new HashSet<int>();
         private static readonly Dictionary<int, LevelEditorPlaceableObject> _touched = new Dictionary<int, LevelEditorPlaceableObject>();
 
         private static Shader ShellShader() => IdentifierObjects.UnlitShader();
@@ -81,12 +86,33 @@ namespace BetterFG.Features.NeonMaterial
             else
             {
                 _wantNeon.Remove(id);
-                RevertNeon(target.transform);
+                RevertNeon(target.transform, ColourOf(target));
             }
         }
 
+        internal static void OnCloned(LevelEditorPlaceableObject clone, LevelEditorPlaceableObject source)
+        {
+            if (clone == null || source == null || IsMarkerObject(clone) || !IsNeon(source)) return;
+            int id = clone.gameObject.GetInstanceID();
+            _wantNeon.Add(id);
+            _touched[id] = clone;
+            ApplyNeon(clone.transform, ColourOf(clone));
+        }
+
+        internal static void OnPlaced(LevelEditorPlaceableObject lepo)
+        {
+            if (lepo == null || _touched.Count == 0) return;
+            if (!_touched.ContainsKey(lepo.gameObject.GetInstanceID())) return;
+            Reconcile();
+        }
+
+        internal static LevelEditorPlaceableObject LastParamTarget;
+
         internal static void OnParamMenuClosed()
         {
+            if (LastParamTarget != null && IsNeon(LastParamTarget)) RefreshColour(LastParamTarget);
+            LastParamTarget = null;
+
             if (_touched.Count == 0) return;
             var host = BeanMonitorService.Instance;
             if (host != null) host.StartCoroutine(ReconcileNextFrame().WrapToIl2Cpp());
@@ -136,6 +162,8 @@ namespace BetterFG.Features.NeonMaterial
         {
             _wantNeon.Clear();
             _touched.Clear();
+            _lit.Clear();
+            LastParamTarget = null;
         }
 
         internal static void ApplyNeon(Transform root, Color colour)
@@ -148,6 +176,16 @@ namespace BetterFG.Features.NeonMaterial
                 Mathf.Clamp01(colour.g * ColourBoost),
                 Mathf.Clamp01(colour.b * ColourBoost), 1f);
 
+            var drawable = root.GetComponentInChildren<LevelEditorDrawableData>(true);
+            if (drawable != null && drawable.Renderer != null)
+            {
+                ShellDrawable(drawable, tint);
+                _lit.Add(root.gameObject.GetInstanceID());
+                return;
+            }
+
+            bool any = false;
+
             foreach (var r in root.GetComponentsInChildren<Renderer>(true))
             {
                 if (r == null) continue;
@@ -155,7 +193,13 @@ namespace BetterFG.Features.NeonMaterial
                 if (t.name.StartsWith(PillarName, StringComparison.Ordinal) || t.name == ShellName) continue;
 
                 var existing = t.Find(ShellName);
-                if (existing != null) { TintShell(existing, sh, tint); continue; }
+                if (existing != null)
+                {
+                    existing.localScale = Vector3.one * ShellGrow;
+                    TintShell(existing, sh, tint);
+                    any = true;
+                    continue;
+                }
 
                 Mesh mesh = null;
                 var mf = r.GetComponent<MeshFilter>();
@@ -177,21 +221,86 @@ namespace BetterFG.Features.NeonMaterial
                 sr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 sr.receiveShadows = false;
                 TintShell(shell.transform, sh, tint);
+                any = true;
             }
+
+            if (any) _lit.Add(root.gameObject.GetInstanceID());
+        }
+
+        internal static void OnDrawableRescaled(LevelEditorDrawableData drawable)
+        {
+            if (_lit.Count == 0) return;
+            var lepo = drawable.Placeable;
+            if (lepo == null || !_lit.Contains(lepo.gameObject.GetInstanceID())) return;
+            ApplyNeon(lepo.transform, ColourOf(lepo));
+        }
+
+        private static Shader ScalingShader()
+        {
+            if (_scalingShader != null) return _scalingShader;
+            _scalingShader = Shader.Find(ScalingShaderName);
+            if (_scalingShader == null)
+                foreach (var c in Resources.FindObjectsOfTypeAll<Shader>())
+                    if (c != null && c.name == ScalingShaderName) { _scalingShader = c; break; }
+            if (_scalingShader == null) Plugin.Log.LogWarning($"no {ScalingShaderName} in the build, floors will not get a neon shell");
+            return _scalingShader;
+        }
+
+        private static void ShellDrawable(LevelEditorDrawableData drawable, Color tint)
+        {
+            var shader = ScalingShader();
+            if (shader == null) return;
+
+            var r = drawable.Renderer;
+            var mf = r.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null) return;
+
+            var t = r.transform;
+            var shell = t.Find(ShellName);
+            if (shell == null)
+            {
+                var go = new GameObject(ShellName);
+                shell = go.transform;
+                shell.SetParent(t, false);
+                shell.localPosition = Vector3.zero;
+                shell.localRotation = Quaternion.identity;
+                shell.localScale = Vector3.one * ShellGrow;
+                go.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+            }
+
+            var sr = shell.GetComponent<MeshRenderer>();
+            var mat = sr.sharedMaterial;
+            if (mat == null || mat.shader != shader) { mat = new Material(shader) { name = ShellName }; sr.sharedMaterial = mat; }
+
+            var swatch = mat.GetTexture(TextureId)?.TryCast<Texture2D>();
+            if (swatch == null) { swatch = new Texture2D(1, 1); mat.SetTexture(TextureId, swatch); }
+            swatch.SetPixel(0, 0, tint);
+            swatch.Apply();
+
+            mat.SetVector(WorldScaleId, drawable.GetShaderScale());
         }
 
         private static void TintShell(Transform shell, Shader sh, Color tint)
         {
             var sr = shell.GetComponent<MeshRenderer>();
             if (sr == null) return;
+
             var mat = sr.sharedMaterial;
             if (mat == null || mat.shader != sh) { mat = new Material(sh) { name = ShellName }; sr.sharedMaterial = mat; }
             foreach (int id in ColorIds)
                 if (mat.HasProperty(id)) mat.SetColor(id, tint);
+
         }
 
-        internal static void RevertNeon(Transform root)
+
+        internal static void RevertNeon(Transform root, Color colour)
         {
+            _lit.Remove(root.gameObject.GetInstanceID());
+
+            var drawable = root.GetComponentInChildren<LevelEditorDrawableData>(true);
             var shells = new List<Transform>();
             foreach (var tr in root.GetComponentsInChildren<Transform>(true))
                 if (tr != null && tr.name == ShellName) shells.Add(tr);
@@ -280,20 +389,5 @@ namespace BetterFG.Features.NeonMaterial
             return true;
         }
 
-        internal static void SyncDelayed()
-        {
-            var host = BeanMonitorService.Instance;
-            if (host != null) host.StartCoroutine(DelayedRoutine().WrapToIl2Cpp());
-        }
-
-        private static IEnumerator DelayedRoutine()
-        {
-            int[] waits = { 5, 15, 45, 120 };
-            foreach (int w in waits)
-            {
-                for (int i = 0; i < w; i++) yield return null;
-                Sync();
-            }
-        }
     }
 }

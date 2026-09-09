@@ -7,9 +7,18 @@ namespace BetterFG.Utilities
     public static class BeanAnimationUtil
     {
         static bool _paramsCached;
-        static int _grounded, _slope, _zVel, _xVel, _yVel, _airY;
+        static int _grounded, _slope, _zVel, _xVel, _yVel, _airY, _moving;
         static float _velMod, _castRadius;
         static LayerMask _groundMask;
+
+        public static int MovingParam
+        {
+            get
+            {
+                if (!_paramsCached) CacheParams();
+                return _moving;
+            }
+        }
 
         static void CacheParams()
         {
@@ -19,6 +28,7 @@ namespace BetterFG.Utilities
             _xVel = FallGuysCharacterController.xVelParam;
             _yVel = FallGuysCharacterController.yVelParam;
             _airY = FallGuysCharacterController.airOnlyYVelParam;
+            _moving = FG.Common.Character.MotorFunctionMovementStateMove.movingParam;
             _velMod = FallGuysCharacterController.AnimationVelocityParamModifier;
             _castRadius = FallGuysCharacterController.GroundCheckSphereCastRadius;
             _groundMask = FallGuysCharacterController.groundMask;

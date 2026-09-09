@@ -86,8 +86,17 @@ namespace BetterFG.Customization.Pets
             if (fgcc._ragdollController != null)
                 fgcc._ragdollController._upperBodyEnabled = false;
 
-            if (data.costume != null)
-                yield return ApplyCostume(data.costume, bean);
+            var loader = CustomizationServices.LoaderService;
+            var app = CustomizationServices.ApplicationService;
+            if (loader != null && app != null)
+                foreach (var entry in data.skins)
+                {
+                    if (SkinTypeParser.FromString(entry.type) == SkinType.Emote) continue;
+                    ActiveSkinSlot slot = null;
+                    yield return loader.ResolveProfileSlot(entry, new Action<ActiveSkinSlot>(s => slot = s));
+                    if (slot == null || bean == null) continue;
+                    yield return app.ApplySkinToBean(slot, bean);
+                }
 
             if (data.skinTexEntries != null)
                 foreach (var entry in data.skinTexEntries)
@@ -199,67 +208,17 @@ namespace BetterFG.Customization.Pets
             if (fch == null) return;
             fch.EnsureIsInitialized();
 
-            var localSel = GlobalGameStateClient.Instance?.PlayerProfile?.CustomisationSelections;
-
             CostumeOption top = null, bot = null;
             try { top = SkinApplicationService.FindOptionByName(SkinTexCategory.Upper, data.costumeTop)?.TryCast<CostumeOption>(); } catch { }
             try { bot = SkinApplicationService.FindOptionByName(SkinTexCategory.Lower, data.costumeBottom)?.TryCast<CostumeOption>(); } catch { }
-            if (top == null) top = localSel?.CostumeTopOption;
-            if (bot == null) bot = localSel?.CostumeBottomOption;
             try { if (top != null) fch.UpdateCostumeOption(top, false); } catch { }
             try { if (bot != null) fch.UpdateCostumeOption(bot, false); } catch { }
 
             ColourOption col = null;
             if (!string.IsNullOrEmpty(data.colour))
                 try { col = SkinApplicationService.FindOptionByName(SkinTexCategory.Colour, data.colour)?.TryCast<ColourOption>(); } catch { }
-            if (col == null)
-            {
-                var live = localSel?.ColourOption;
-                bool isTeam = false;
-                try { isTeam = live != null && live.TryCast<TeamColourOption>() != null; } catch { }
-                if (live != null && !isTeam) col = live;
-            }
             if (col != null) { try { fch.UpdateColourOption(col); } catch { } }
-            else Plugin.Log.LogWarning($"pet '{data.name}': no non-team colour to apply (pick '{data.colour}', local selection is a team colour) - pick one in the wizard");
         }
 
-        static IEnumerator ApplyCostume(SkinInfo skin, GameObject bean)
-        {
-            var loader = CustomizationServices.LoaderService;
-            var app = CustomizationServices.ApplicationService;
-            if (loader == null || app == null) yield break;
-
-            AssetBundle bundle = null;
-            if (app.TryGetLoadedBundle(skin.file, out var cached) && cached != null)
-            {
-                bundle = cached;
-            }
-            else
-            {
-                Action<SkinInfo, AssetBundle> onLoaded = (i, b) => { if (b != null && i != null && i.file == skin.file) bundle = b; };
-                loader.OnSkinLoaded += onLoaded;
-
-                string repoRaw = RepoRegistry.ResolveRaw(skin.sourceRepo);
-                string folder = !string.IsNullOrEmpty(skin.repoFolder) ? skin.repoFolder : $"Costumes/{skin.file}";
-                loader.DownloadSkinWithInfo(skin.file, $"{repoRaw}/{folder}/{skin.file}", $"{repoRaw}/{folder}/info.json");
-
-                float waited = 0f;
-                while (bundle == null && waited < 20f)
-                {
-                    yield return null;
-                    waited += Time.unscaledDeltaTime;
-                }
-                loader.OnSkinLoaded -= onLoaded;
-            }
-
-            if (bundle == null)
-            {
-                Plugin.Log.LogWarning($"pet costume '{skin.file}' never loaded, pet stays in its base look");
-                yield break;
-            }
-
-            var slot = new ActiveSkinSlot { skinInfo = skin, bundle = bundle, type = SkinType.Costume };
-            yield return app.ApplySkinToBean(slot, bean);
-        }
     }
 }

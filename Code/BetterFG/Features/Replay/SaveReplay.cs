@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -13,7 +13,7 @@ namespace BetterFG.Features.Replay
         public const string PickerFilter = "BettrFG Replay\0*.bfgreplay\0";
         public const string FramesExtension = ".bfgframes";
         public const int ContainerMagic = unchecked((int)0xBF9E0001);
-        public const int FormatVersion = 22;
+        public const int FormatVersion = 23;
 
         public static string FramesPathFor(string path) => Path.ChangeExtension(path, FramesExtension);
 
@@ -60,7 +60,41 @@ namespace BetterFG.Features.Replay
                 WriteGhosts(bw, rec);
                 WritePowerups(bw, rec);
                 WriteFrameList(bw, rec.petFrames);
+                WriteMachinima(bw, rec);
             }
+        }
+
+        static void WriteMachinima(BinaryWriter bw, ReplayRecording rec)
+        {
+            bw.Write(rec.isMachinima);
+            if (!rec.isMachinima) return;
+#if MACHINIMA
+
+            foreach (var p in rec.players)
+            {
+                bw.Write(p.inTime);
+
+                bw.Write(p.moves.Count);
+                foreach (var m in p.moves)
+                {
+                    bw.Write(m.time);
+                    bw.Write(m.position.x); bw.Write(m.position.y); bw.Write(m.position.z);
+                    bw.Write(m.yaw);
+                    bw.Write(m.faceMotion);
+                }
+
+                bw.Write(p.actions.Count);
+                foreach (var a in p.actions)
+                {
+                    bw.Write(a.time);
+                    bw.Write((int)a.kind);
+                    bw.Write(a.duration);
+                    bw.Write(a.targetPlayerId);
+                    bw.Write(a.targetObject);
+                    bw.Write(a.payload ?? "");
+                }
+            }
+#endif
         }
 
         static void WritePowerups(BinaryWriter bw, ReplayRecording rec)
@@ -313,6 +347,7 @@ namespace BetterFG.Features.Replay
             Num(sb, "levelVersion", rec.levelVersion);
             Str(sb, "backgroundScene", rec.backgroundScene);
             Bool(sb, "isUgc", rec.isUgc);
+            Bool(sb, "isMachinima", rec.isMachinima);
             Bool(sb, "isFinal", rec.isFinal);
             Num(sb, "squadSize", (int)rec.squadSize);
             sb.Append(",\"duration\":").Append(rec.duration.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
@@ -487,6 +522,7 @@ namespace BetterFG.Features.Replay
                     Str(sb, "source", skin.source);
                     Str(sb, "localPath", skin.localPath);
                     Str(sb, "repoUrl", skin.repoUrl);
+                    Str(sb, "folder", skin.folder);
                     Num(sb, "hand", skin.hand);
                     sb.Append('}');
                 }

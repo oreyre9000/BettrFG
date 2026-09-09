@@ -1,4 +1,4 @@
-using BetterFG.Utilities;
+﻿using BetterFG.Utilities;
 using HarmonyLib;
 using LevelEditor;
 
@@ -10,6 +10,7 @@ namespace BetterFG.Patches
         [HarmonyPostfix]
         public static void Postfix(LevelEditorObjectInfoViewModel __instance, ref string __result)
         {
+            BfgProbe.Hit("get_ObjectName");
             var name = IdentifierObjectRegistry.ResolveDisplayName(__instance._lepo);
             if (name != null) __result = name;
         }
@@ -21,6 +22,7 @@ namespace BetterFG.Patches
         [HarmonyPostfix]
         public static void Postfix(LevelEditorObjectInfoViewModel __instance, ref string __result)
         {
+            BfgProbe.Hit("get_ObjectDescription");
             var description = IdentifierObjectRegistry.ResolveDescription(__instance._lepo);
             if (description != null) __result = description;
         }

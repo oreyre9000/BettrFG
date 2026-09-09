@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -16,7 +16,7 @@ namespace BetterFG.Features.Onboarding
     // advances on Next; nothing here makes you click the real buttons.
     //
     // dismissing one writes "seen.<id>", so each guide only ever shows once.
-    public class HelpPrompt : MonoBehaviour
+    public class HelpPrompt : PromptHost
     {
         public HelpPrompt(IntPtr ptr) : base(ptr) { }
 
@@ -31,10 +31,6 @@ namespace BetterFG.Features.Onboarding
         private Page[] _pages;
         private int _page = -1;
 
-        private Canvas _canvas;
-        private Canvas _blockerCanvas;
-        private OnboardingBlocker _blocker;
-        private GameObject _popup;
         private GameObject _pulse;
 
         private struct Page
@@ -181,25 +177,17 @@ namespace BetterFG.Features.Onboarding
         private IEnumerator BuildAfterOpenAnim()
         {
             yield return new WaitForSecondsRealtime(0.4f);
-            Build();
-        }
-
-        private void Build()
-        {
-            _blockerCanvas = UGUIShip.CreateCanvas("BetterFG_HelpBlocker");
-            _blockerCanvas.sortingOrder = BlockerOrder;
-            _blocker = new OnboardingBlocker(_blockerCanvas);
-            _blocker.SetHole(null);
-
-            _canvas = UGUIShip.CreateCanvas("BetterFG_HelpCanvas");
-            _canvas.sortingOrder = CanvasOrder;
-
+            CreateSurfaces("Help", CanvasOrder, BlockerOrder);
+            // a canvas created this frame still reports the raw screen size: its CanvasScaler hasn't
+            // run yet, so the reference-resolution scale isn't in the rect. everything placed against
+            // it lands ~20% too far out and hangs off the edge. one frame and the rect is real.
+            yield return null;
             ShowAsk();
         }
 
         private void ShowAsk()
         {
-            var (pos, pivot) = Place(null);
+            var (pos, pivot) = Place();
             Swap(OnboardingPopup.Show(_canvas, _titleId, _askId, pos, pivot,
                 new[]
                 {
@@ -208,19 +196,23 @@ namespace BetterFG.Features.Onboarding
                 }));
         }
 
-        // every popup clears the open tab's column, whether or not it's pointing at something inside
-        // it, a centred one lands right on top of the tab. `box` only steers the height it sits at.
-        private (Vector2 pos, Vector2 pivot) Place(Rect? box)
+        // right next to the open tab's column and pinned to the top, the same height on every page.
+        // the pulse is what points at the individual control, so the popup only has to stay off the
+        // column, tracking the target's height is what walked it down into the bottom corner.
+        private (Vector2 pos, Vector2 pivot) Place()
         {
+            var r = _canvas.GetComponent<RectTransform>().rect;
             var host = HostPanelAabb();
-            if (host == null)
-                return box == null
-                    ? (Vector2.zero, new Vector2(0.5f, 0.5f))
-                    : (CanvasGeom.Beside(box.Value), new Vector2(0f, 0.5f));
+            if (host == null) return (new Vector2(0f, r.yMax - 60f), new Vector2(0.5f, 1f));
 
-            float y = box?.center.y ?? host.Value.center.y;
-            return (CanvasGeom.Beside(Rect.MinMaxRect(host.Value.xMin, y, host.Value.xMax, y)),
-                    new Vector2(0f, 0.5f));
+            // level with the column's own top edge, not the screen's, the column sits low on screen
+            // and a popup pinned to the top of the canvas reads as unrelated to it
+            float y = Mathf.Min(host.Value.yMax, r.yMax - 40f);
+
+            // to its right, unless the column is far enough over that the popup wouldn't fit there
+            return host.Value.xMax + 20f + OnboardingPopup.Width <= r.xMax
+                ? (new Vector2(host.Value.xMax + 20f, y), new Vector2(0f, 1f))
+                : (new Vector2(host.Value.xMin - 20f, y), new Vector2(1f, 1f));
         }
 
         private void NextPage()
@@ -238,7 +230,7 @@ namespace BetterFG.Features.Onboarding
                 // a tab that's still moving and the pulse latches onto a rect about to be destroyed
                 if (page.Settle > 0f)
                 {
-                    if (_popup != null) { StartCoroutine(CloseThenDestroy(_popup).WrapToIl2Cpp()); _popup = null; }
+                    CloseCurrent();
                     StartCoroutine(ShowPageAfter(page, _page, page.Settle).WrapToIl2Cpp());
                     return;
                 }
@@ -257,16 +249,14 @@ namespace BetterFG.Features.Onboarding
         {
             bool last = _page == _pages.Length - 1;
 
-            Rect? box = null;
             var target = ResolveTarget(page.TargetKey);
             if (target != null)
             {
                 var b = CanvasGeom.AabbOf(_canvas, target, 4f);
                 SpawnPulse(b.center, Mathf.Max(60f, b.height * 2.6f), target, page.Box);
-                box = b;
             }
 
-            var (pos, pivot) = Place(box);
+            var (pos, pivot) = Place();
             Swap(OnboardingPopup.Show(_canvas, _titleId, page.BodyId, pos, pivot,
                 new[]
                 {
@@ -312,40 +302,6 @@ namespace BetterFG.Features.Onboarding
             if (_pulse != null) { UnityEngine.Object.Destroy(_pulse); _pulse = null; }
         }
 
-        private void Swap(GameObject next)
-        {
-            if (_popup != null) StartCoroutine(CloseThenDestroy(_popup).WrapToIl2Cpp());
-            _popup = next;
-            StartCoroutine(OpenPopup(next).WrapToIl2Cpp());
-        }
-
-        private static IEnumerator CloseThenDestroy(GameObject go)
-        {
-            var rt = go.GetComponent<RectTransform>();
-            float e = 0f;
-            while (e < OnboardingPopup.AnimDur)
-            {
-                e += Time.unscaledDeltaTime;
-                rt.localScale = new Vector3(1f - Mathf.Clamp01(e / OnboardingPopup.AnimDur), 1f, 1f);
-                yield return null;
-            }
-            UnityEngine.Object.Destroy(go);
-        }
-
-        private static IEnumerator OpenPopup(GameObject go)
-        {
-            var rt = go.GetComponent<RectTransform>();
-            float e = 0f;
-            while (e < OnboardingPopup.AnimDur)
-            {
-                e += Time.unscaledDeltaTime;
-                rt.localScale = new Vector3(
-                    OnboardingPopup.OpenCurve.Evaluate(Mathf.Clamp01(e / OnboardingPopup.AnimDur)), 1f, 1f);
-                yield return null;
-            }
-            rt.localScale = Vector3.one;
-        }
-
         private void Dismiss()
         {
             SettingsService.Set("seen." + _id, "true");
@@ -355,13 +311,7 @@ namespace BetterFG.Features.Onboarding
         private IEnumerator TearDown()
         {
             ClearPulse();
-            if (_popup != null)
-            {
-                yield return CloseThenDestroy(_popup);
-                _popup = null;
-            }
-            if (_canvas != null) UnityEngine.Object.Destroy(_canvas.gameObject);
-            if (_blockerCanvas != null) UnityEngine.Object.Destroy(_blockerCanvas.gameObject);
+            yield return TearDownSurfaces();
             if (_live == this) _live = null;
             UnityEngine.Object.Destroy(gameObject);
         }

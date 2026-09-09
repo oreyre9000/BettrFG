@@ -31,7 +31,7 @@ namespace BetterFG.UI
         private static readonly List<(Image img, Color baseColor)> _fills = new List<(Image, Color)>();
 
         public static bool AlwaysShow;
-        public static float IdleAlpha = 0.25f;
+        public static float IdleAlpha = 0.15f;
         public static Color Tint = Color.white;
 
         private static readonly System.Globalization.CultureInfo CI = System.Globalization.CultureInfo.InvariantCulture;
@@ -49,7 +49,7 @@ namespace BetterFG.UI
         {
             _loaded = true;
             AlwaysShow = SettingsService.Get(KEY_ALWAYS, "false") == "true";
-            IdleAlpha = F(KEY_IDLE_ALPHA, 0.25f);
+            IdleAlpha = F(KEY_IDLE_ALPHA, 0.15f);
             Tint = new Color(F(KEY_TINT_R, 1f), F(KEY_TINT_G, 1f), F(KEY_TINT_B, 1f));
         }
 
@@ -107,8 +107,6 @@ namespace BetterFG.UI
 
     public class Tab : MonoBehaviour
     {
-        public const string KEY_TAB_SWITCH_TOOLTIP = "ui.tab_switch_tooltip";
-
         public Tab(IntPtr ptr) : base(ptr) { }
 
         // the tab-title hover overlay, found under BG after BuildBackground runs
@@ -263,9 +261,6 @@ namespace BetterFG.UI
             hoverImg.raycastTarget = false;
             var hoverTint = hoverGo.AddComponent<TabHoverTint>();
             hoverTint.Tab = this;
-
-            int others = Mathf.Max(0, BetterFGTabRegistry.All.Count - BetterFGUIMan.MAX_SLOTS);
-            BetterFGUIMan.MakeLocalizedObjectTooltip(titleRt, "ui.right_click_switch_tab_fmt", new object[] { others }, 0.12f, tabSwitch: true);
 
             titleGo.AddComponent<Image>().color = Color.clear;
             var btn = titleGo.AddComponent<Button>();

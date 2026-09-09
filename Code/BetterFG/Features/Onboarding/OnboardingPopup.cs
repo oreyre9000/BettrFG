@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using UnityEngine;
 using UnityEngine.UI;
 using BettrFG.uGUI;
 
 namespace BetterFG.Features.Onboarding
 {
-    // tutorial popup, styled off the sidewheel windows: delux light panel, tilted bold title in a
+    // tutorial popup, styled off the sidewheel windows: delux dark panel, tilted bold title in a
     // band at the top, wrapped body, and small tilted buttons in the bottom-right corner. the title
     // tilt matches the windows/tab titles; the buttons mirror it.
     public static class OnboardingPopup
@@ -18,6 +18,8 @@ namespace BetterFG.Features.Onboarding
         private const float TitleBandH = 28f;
         private const float GapTitleBody = 2f;
         private const float GapBodyButtons = 10f;
+
+        private const float InputH = 24f;
 
         private const float BtnW = 86f;
         private const float BtnH = 26f;
@@ -76,7 +78,8 @@ namespace BetterFG.Features.Onboarding
         // `pos`/`pivot` are canvas space (canvas is centered, +y up). buttons run right-to-left from
         // the bottom-right corner, so the last spec is the primary action.
         public static GameObject Show(Canvas canvas, string titleId, string bodyId,
-            Vector2 pos, Vector2 pivot, ButtonSpec[] buttons)
+            Vector2 pos, Vector2 pivot, ButtonSpec[] buttons,
+            string inputInitial = null, Action<UnityEngine.UI.InputField> onInput = null)
         {
             var canvasRt = canvas.GetComponent<RectTransform>();
             int nBtn = buttons != null ? buttons.Length : 0;
@@ -102,7 +105,7 @@ namespace BetterFG.Features.Onboarding
             panelRt.offsetMin = new Vector2(-PanelBleedX + PanelNudge.x, -PanelBleedY + PanelNudge.y);
             panelRt.offsetMax = new Vector2(PanelBleedX + PanelNudge.x, PanelBleedY + PanelNudge.y);
             panelRt.localRotation = TitleRot;
-            UGUIShip.ApplyDeluxPanel(panelGo.AddComponent<Image>(), 2f);
+            UGUIShip.ApplyDeluxPanelDark(panelGo.AddComponent<Image>(), 2f);
 
             var title = UGUIShip.CreateLabel(root.transform,
                 new Rect(0f, 0f, innerW, TitleBandH), titleId, FsTitle, TitleCol, TextAnchor.MiddleLeft);
@@ -123,16 +126,32 @@ namespace BetterFG.Features.Onboarding
 
             // the label is parented and sized, so preferredHeight now reflects the real wrapped
             // line count at this width, size the panel to it instead of guessing.
-            float bodyH = Mathf.Max(body.preferredHeight, FsBody * 2f);
+            float bodyH = Mathf.Max(UGUIShip.PreferredHeight(body, innerW), FsBody * 2f);
             body.rectTransform.sizeDelta = new Vector2(innerW, bodyH);
 
-            float height = bodyTop + bodyH + (nBtn > 0 ? GapBodyButtons + BtnH : 0f) + PadBottom;
+            bool wantInput = inputInitial != null;
+            float inputBlock = wantInput ? GapBodyButtons + InputH : 0f;
+            float height = bodyTop + bodyH + inputBlock
+                           + (nBtn > 0 ? GapBodyButtons + BtnH : 0f) + PadBottom;
             rt.sizeDelta = new Vector2(Width, height);
             rt.anchoredPosition = ClampToCanvas(pos, pivot, new Vector2(Width, height), canvasRt.rect.size);
 
             // now the height is known, squash the panel to land where it should (see PanelScaleX)
             panelRt.localScale = new Vector3(PanelScaleX,
                 (height + PanelTopOverhang - PanelBottomTrim) / (height + PanelBleedY * 2f), 1f);
+
+            if (wantInput)
+            {
+                var field = UGUIShip.CreateInputField(root.transform,
+                    new Rect(PadX, bodyTop + bodyH + GapBodyButtons, innerW, InputH),
+                    "", Color.black, UGUIShip.WHITE, FsBody);
+                field.text = inputInitial;
+                var frt = field.GetComponent<RectTransform>();
+                frt.anchorMin = frt.anchorMax = new Vector2(0f, 1f);
+                frt.pivot = new Vector2(0f, 1f);
+                frt.anchoredPosition = new Vector2(PadX, -(bodyTop + bodyH + GapBodyButtons));
+                onInput?.Invoke(field);
+            }
 
             float bx = BtnOverhangX;
             float by = -(height - PadBottom - BtnH * 0.5f);

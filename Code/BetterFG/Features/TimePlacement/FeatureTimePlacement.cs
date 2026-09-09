@@ -754,6 +754,7 @@ namespace BetterFG.Features.TimePlacement
         {
             if (!_updating || !Enabled || _panels.Count == 0) return;
             if (QualStatusActive()) { RefreshQualStatus(); return; }
+            if (IsScoringRound()) { QueueRepaint(); return; }
             if (!IsSurvivalFinalSquadRound()) return;
             string key = PlayerKeyById(remotePlayerId);
             if (string.IsNullOrEmpty(key)) return;
@@ -789,7 +790,7 @@ namespace BetterFG.Features.TimePlacement
                     if (!_deathTimes.ContainsKey(pkey)) _deathTimes[pkey] = clock;
                     Nametag.NametagIconApplicator.SeedKeyForName(PlayerUtils.CleanPlayerName(pkey), pkey);
                 }
-                BetterFG.Tweaks.SkipNotificationTweak.Instance?.Notify(pkey, progressMessage);
+                BetterFG.Tweaks.SkipNotificationTweak.Instance?.Notify(pkey, progressMessage, "leaderboard.skipped");
                 OnPlayerEliminated(progressMessage.playerId);
                 return;
             }
@@ -820,6 +821,8 @@ namespace BetterFG.Features.TimePlacement
                         _deathTimes[pkey] = survived > 0 && Mathf.FloorToInt(clock) != survived ? survived : clock;
                         if (progressMessage.isDisconnected) _disconnectedKeys.Add(pkey);
                     }
+                    if (progressMessage.isDisconnected)
+                        BetterFG.Tweaks.SkipNotificationTweak.Instance?.Notify(pkey, progressMessage, "leaderboard.playerleft");
                     Nametag.NametagIconApplicator.SeedKeyForName(PlayerUtils.CleanPlayerName(pkey), pkey);
                 }
                 OnPlayerEliminated(progressMessage.playerId);
@@ -1672,6 +1675,7 @@ namespace BetterFG.Features.TimePlacement
                     && statusByKey.TryGetValue(kk, out int _sst) && _sst == 2) continue;
                 sig = (sig * 31) ^ pe.Score;
                 sig = (sig * 31) ^ (kk != null ? kk.GetHashCode() : 0);
+                sig = (sig * 31) ^ (kk != null && _deathTimes.ContainsKey(kk) ? 1 : 0);
                 rowsToShow++;
             }
             // also fold the last-drawn row count so shrinking (players leaving) still repaints.
@@ -1718,6 +1722,11 @@ namespace BetterFG.Features.TimePlacement
                 {
                     TimeSpan qts = TimeSpan.FromSeconds(_qualTimes[p.playerKey]);
                     name += $"   <color=#FFFF00>{string.Format("{0:D2}:{1:D2}:{2:D3}", qts.Minutes, qts.Seconds, qts.Milliseconds)}</color>";
+                }
+                else if (QualStatusOn && p != null && p.playerKey != null && _deathTimes.ContainsKey(p.playerKey))
+                {
+                    TimeSpan dts = TimeSpan.FromSeconds(_deathTimes[p.playerKey]);
+                    name += $"   <color=#FF5555>{string.Format("{0:D2}:{1:D2}:{2:D3}", dts.Minutes, dts.Seconds, dts.Milliseconds)}</color>";
                 }
 
                 // solo scoring (points, 1 player per row) — bigger name, this path has one name per
@@ -1781,7 +1790,9 @@ namespace BetterFG.Features.TimePlacement
                 var p = players[i];
                 if (p == null || string.IsNullOrEmpty(p.playerKey)) continue;
                 if (IsGhost(p.remotePlayerID)) continue;
-                map[p.playerKey] = p.completedLevel || _qualTimes.ContainsKey(p.playerKey) ? 0 : (p.fgcc == null ? 2 : 1);
+                map[p.playerKey] = _deathTimes.ContainsKey(p.playerKey) ? 2
+                    : p.completedLevel || _qualTimes.ContainsKey(p.playerKey) ? 0
+                    : (p.fgcc == null ? 2 : 1);
             }
             return map;
         }

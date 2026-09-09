@@ -56,6 +56,7 @@ namespace BetterFG.UI
         protected virtual void RefreshSummary() { }
         // validate + persist; return true to leave back to the list, false (with a SetStatus) to stay
         protected virtual bool Save() => false;
+        protected virtual string FinishLabel => EditIndex >= 0 ? "SAVE CHANGES" : "SAVE";
         protected virtual Tab MakeListTarget() => null;
 
         // optional fixed-height region between the step header and the step panels, e.g. a live preview
@@ -173,7 +174,7 @@ namespace BetterFG.UI
 
             bool last = Step == titles.Length - 1;
             var nlbl = _nextBtn.GetComponentInChildren<Text>();
-            if (nlbl != null) UGUIShip.RelabelText(nlbl, last ? (EditIndex >= 0 ? "SAVE CHANGES" : "SAVE") : "NEXT >");
+            if (nlbl != null) UGUIShip.RelabelText(nlbl, last ? FinishLabel : "NEXT >");
 
             bool can = CanAdvance(Step);
             _nextBtn.interactable = can;

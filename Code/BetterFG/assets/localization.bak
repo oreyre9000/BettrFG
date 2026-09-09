@@ -35,8 +35,8 @@ tweak.keep_nametags_on_qual_screen	Keep nametags on qual screen
 tweak.lobby_autokick_bad_names	Lobby Autokick Bad Names
 tweak.matchmaking_queue_count	Matchmaking Queue Count
 tweak.max_fall_feed_notifications	Max Fall Feed Notifications
-tweak.skip_notification	Skip Notification
-tweak.skip_notification.tip	Fires a Fall Feed notification whenever a player hits the Explore skip button.
+tweak.more_fall_feed_notifications	More Fall Feed Notifications
+tweak.more_fall_feed_notifications.tip	Adds Fall Feed notifications the game doesn't show: a player hitting the Explore skip button, and a player leaving mid round.
 tweak.multi_show_queue	Multi-Show Queue
 tweak.neutralize_eos_voice_chat	Neutralize EOS voice-chat
 tweak.notify_round_start	Notify round start
@@ -45,6 +45,7 @@ tweak.quick_skip_victory_scene	Quick Skip Victory Scene
 tweak.random_show_select	Random Show / Mode
 tweak.random_show_select_tip	Floats a Random prompt (right stick click) on the private lobby show selector — picks one of the shows on screen and confirms it.
 tweak.refocus_game_press_c	Refocus game (press C)
+tweak.retro_goop_materials	Unity slime in creative
 tweak.shadow_custom_px	Shadow custom px
 tweak.shadow_distance	Shadow distance
 tweak.show_discovery_play_counts	Show Discovery play counts
@@ -308,6 +309,8 @@ ui.eye_rotation	Eye rotation
 ui.eye_scale	Eye scale
 ui.eye_y_scale	Eye Y scale
 ui.f1_lock_unlock_cursor	F1 - lock/unlock cursor
+watermark.toggle_ui	{0} - hide/show BettrFG UI
+watermark.toggle_wheel	{0} - toggle settings wheel
 ui.faceplate	Faceplate
 ui.faces	Faces
 ui.fall_guys_ui_scale	FALL GUYS UI SCALE
@@ -636,7 +639,6 @@ ui.revert_all	Revert All
 ui.reverted	reverted
 ui.rich_presence	Rich presence
 ui.right_click	Right click
-ui.right_click_switch_tab_fmt	Right click to switch to another tab of {0} others
 ui.rotation	ROTATION
 ui.round	round
 ui.round_info_json_path	Round info.json path
@@ -839,6 +841,7 @@ leaderboard.player_fallback	Player
 leaderboard.player_id_fmt	Player {0}
 leaderboard.skipped	SKIPPED
 leaderboard.disconnected	DISCONNECTED
+leaderboard.playerleft	LEFT
 leaderboard.out	OUT
 leaderboard.squad_fallback_fmt	Squad {0}
 rpc.exporting_replay_fmt	Exporting a replay ({0}%)
@@ -900,19 +903,20 @@ sidewheel.profiles	Profiles
 sidewheel.credits	Credits
 options.header_general	GENERAL
 options.header_misc	MISC
-options.tab_switch_tooltip	Tab switch tooltip
 options.tint_r	Tint R
 options.tint_g	Tint G
 options.tint_b	Tint B
+news.show_feed	News feed
+news.dont_show	Don't show news feed
 switch_tab.desc.customization	skins, colours, profiles
-switch_tab.desc.ugc_customization	skins, colours, profiles
+switch_tab.desc.ugc_customization	skins from GitHub repos, accessories, items, etc.
 switch_tab.desc.main_menu	menu plinth, background, camera
 switch_tab.desc.user_interface	fonts, patterns, scaling, backgrounds
 switch_tab.desc.nametag	colours, icons, nameplates, crowns
 switch_tab.desc.social	emotes, emoticons, phrases
 switch_tab.desc.features	opt-in gameplay features
 switch_tab.desc.skin_texture	manage saved skin textures
-switch_tab.desc.all_cosmetics	unlock every cosmetic locally
+switch_tab.desc.all_cosmetics	all in-game cosmetics
 switch_tab.desc.creative	creative mode extras
 switch_tab.desc.personal_bests	PB tracking and stats
 switch_tab.desc.replays	record and rewatch rounds
@@ -972,14 +976,18 @@ nametag_outline.mode_inset	Inset (inside text)
 nametag_all.hide_platform_icons	Hide platform icons for everyone
 nametag_all.remove_arrow	Remove arrow
 nametag_all.scale	Player nametag scale
-ui.tab_switch_tooltip	Tab Switch Tooltip
+nametag_all.arrow_scale	Arrow scale
+startup.choose_language	Choose your language
+startup.continue	Continue
 onboarding.intro.title	Welcome to BettrFG
 onboarding.intro.body	This tour covers the tabs and the side wheel. It takes about a minute.
 onboarding.btn.skip	Skip
 onboarding.btn.lets_go	Start
 onboarding.btn.next	Next
 onboarding.btn.finish	Finish
-onboarding.tabs.title	Tabs
+onboarding.tabsintro.title	Tabs
+onboarding.tabsintro.body	BettrFG is built from one or more tabs. Each tab holds the settings for the one thing it covers, such as your bean, the nametags or Creative.
+onboarding.tabs.title	Opening a tab
 onboarding.tabs.body	Click the highlighted tab title to open it.
 onboarding.switch.title	Changing a tab
 onboarding.switch.body	Right-click the same title to list the other tabs.
@@ -987,6 +995,8 @@ onboarding.picktab.title	Tab list
 onboarding.picktab.body	Any slot can hold any tab. Select one from the list.
 onboarding.closetab.title	Closing a tab
 onboarding.closetab.body	Click the title again to close it.
+onboarding.toggleui.title	Showing the tabs
+onboarding.toggleui.body	The tabs are hidden right now. Press {0} to show them, and the same keys hide them again.
 onboarding.wheel.title	Side wheel
 onboarding.wheel.body	Press {0} to open the side wheel. Settings windows open from here.
 onboarding.tweaks.title	Tweaks
@@ -1022,3 +1032,203 @@ help.uitab.p6	Scaling sets the Fall Guys UI scale and how close it sits to the s
 help.uitab.p7	Use this bar to move between the four sections.
 onboarding.done.title	Tour complete
 onboarding.done.body	Tabs hold the features. The side wheel holds the settings windows.
+asset_export.tab_title	ASSETS
+asset_export.step_pick	Pick a skin
+asset_export.step_export	Export it
+asset_export.upper	Upper
+asset_export.lower	Lower
+asset_export.search_hint	Search for the skin you want to export
+asset_export.search_by_name	Search by name
+asset_export.search	Search
+asset_export.searching	Searching...
+asset_export.type_a_name_first	Type a name first
+asset_export.nothing_matched	Nothing matched that name
+asset_export.matches	{0} match(es), pick one
+asset_export.output_folder	The FBX and its textures are written to
+asset_export.export	EXPORT FBX
+asset_export.exporting	Loading the skin...
+asset_export.pick_a_skin_first	Go back and pick a skin first
+asset_export.nothing_readable	No geometry came back for that skin, nothing was written
+asset_export.summary	skin: {0}
+writes an FBX with its armature plus every texture it uses
+asset_export.done	{0} mesh(es), {1} bones and {2} textures written
+asset_export.reading_bundles	Reading the game files...
+asset_export.no_python	The bundle reader isn't installed. Run the BettrFG installer and add the asset export tools
+assets.options	Options
+assets.configure_project	Configure Unity project
+asset_export.project_title	Unity project
+asset_export.project_body	Pick the Assets folder of the Unity project you want exports to land in. Exports go straight there, so re-exporting replaces the old copy instead of piling up duplicates.
+asset_export.project_browse	BROWSE
+asset_export.project_save	SAVE
+asset_export.project_cancel	CANCEL
+asset_export.step_choose	What to export
+asset_export.choose_prompt	What would you like to export?
+asset_export.cosmetics	Cosmetics
+asset_export.rounds	Rounds
+asset_export.rounds_soon	Round export isn't built yet
+assets.tab_blurb	Pull skins out of the game as FBX models with their armature and textures.
+assets.open	OPEN ASSET EXPORTER
+assets.file	File
+assets.export_selected	Export All Selected
+assets.exit	Exit
+assets.cosmetics	Cosmetics
+assets.rounds	Rounds
+assets.rounds_soon	Round export isn't built yet
+assets.pick_cosmetics	Search for a cosmetic to preview and tick the ones to export
+assets.search_hint	Search by name
+assets.search	Search
+assets.searching	Searching...
+assets.type_a_name_first	Type a name first
+assets.nothing_matched	Nothing matched that name
+assets.matches	{0} match(es)
+assets.selected_count	{0} ticked for export
+assets.nothing_selected	Tick something to export first
+assets.loading_preview	Loading the preview...
+assets.preview_failed	That one wouldn't load
+assets.preview_hint	Drag to rotate, scroll to zoom
+assets.exporting	Exporting {0} ({1} of {2})
+assets.export_done	{0} of {1} exported
+assets.select	Select
+assets.select_all_in_search	Select all currently in search
+assets.unselect_all	Unselect all
+assets.everything	Everything
+assets.everything_hint	Search every addressable key in the game, results come back in 10 pages
+assets.scanning	Scanning addressables...
+assets.page	Page {0} of {1}
+assets.page_of	{0} shown, page {1} of {2}, {3} total
+assets.not_previewable	That key isn't something that can be previewed
+assets.reading_catalog	Reading the asset catalog...
+assets.no_catalog	Couldn't read the game's asset catalog
+assets.is_sound_bank	FMOD sound bank. Export it, then open the .bank in foobar2000 with the vgmstream component.
+assets.opening_bank	Opening the sound bank...
+assets.bank_sounds	{0} sound(s) in this bank
+assets.bank_empty	Nothing playable came out of that bank
+assets.play	Play
+assets.save_mp3	MP3
+assets.playing	Playing {0}
+assets.saved	Saved {0}
+assets.sort	Type
+assets.kind_all	All types
+assets.kind_audio	Audio
+assets.kind_prefab	Prefabs
+assets.kind_mesh	Meshes
+assets.kind_texture	Textures
+assets.mp3_failed	MP3 failed, the wav was saved instead: {0}
+assets.search_failed	Search failed: {0}
+assets.texture_info	{0}   {1}x{2}
+assets.kind_material	Materials
+assets.material_info	{0}   shader: {1}
+assets.export_fbx	Export as FBX
+assets.export_prefab	Export as Unity prefab
+assets.prefab_failed	The prefab could not be built
+assets.upper	(Upper)
+assets.lower	(Lower)
+assets.export_material	Export as Unity material
+assets.export_scene	Export round scene to Unity
+assets.rounds_found	{0} round scene(s) loaded, tick one to export
+assets.rounds_none	No unity round is loaded, start one first
+assets.scene_dumped	Snapshot taken, {0} objects, reading the bundles now
+assets.scene_no_preview	No splash image for this round
+assets.scene_gone	That scene is no longer loaded
+assets.scene_failed	The scene could not be built
+assets.scene_reading	Reading the round scene out of the bundles...
+assets.export_png	Export as PNG
+assets.export_bank	Export bank and MP3s
+assets.cubemap_hint	Cubemap, export it to get the six faces as PNGs
+assets.cubemap_failed	No faces came out of that cubemap
+machinima.new	NEW MACHINIMA
+machinima.filter	Machinima
+machinima.badge	MACHINIMA
+machinima.pick_level_title	Pick a level
+machinima.pick_level_body	Pick a Unity round from the list, or enter a creative share code to build the machinima on that map.
+machinima.share_code_hint	creative share code...
+machinima.use_code	USE CODE
+machinima.search_rounds	search rounds...
+machinima.rounds_found_fmt	{0} rounds
+machinima.start	START
+machinima.untitled	Untitled machinima
+machinima.pick_a_round	Pick a round first.
+machinima.type_a_code	Enter a share code first.
+machinima.no_creative_service	Creative levels are not reachable right now.
+machinima.fetching_level_fmt	Fetching {0}...
+machinima.level_lookup_failed_fmt	{0} would not load: {1}
+machinima.create_player	+ Create player
+machinima.default_player_name_fmt	Player {0}
+machinima.back	BACK
+machinima.lane_action	action
+machinima.lane_movement	movement
+machinima.open_timeline	Open timeline
+machinima.add_move	Add movement key
+machinima.add_action	Add action
+machinima.player_window_title	PLAYER
+machinima.player_name_hint	player name...
+machinima.zone_fmt	On screen {0} to {1}
+machinima.edit_bean	Edit bean
+machinima.move_window_title	MOVEMENT
+machinima.action_window_title	ACTION
+machinima.place_at_camera	Place where the camera looks
+machinima.time	Time
+machinima.pos_x	X
+machinima.pos_y	Y
+machinima.pos_z	Z
+machinima.facing	Facing
+machinima.face_motion	Along motion
+machinima.face_fixed	Fixed
+machinima.yaw	Yaw
+machinima.kind	Action
+machinima.duration	Duration
+machinima.target	Target
+machinima.phrase	Phrase
+machinima.emote	Emote
+machinima.no_target	None
+machinima.no_phrase	None
+machinima.no_emote	None
+machinima.action.jump	Jump
+machinima.action.dive	Dive
+machinima.action.grab_object	Grab object
+machinima.action.grab_player	Grab player
+machinima.action.phrase	Phrase
+machinima.action.emote	Emote
+bean_creator.title	BEAN CREATOR
+bean_creator.game_cosmetics	In-game
+bean_creator.ugc	UGC
+bean_creator.kind_costumes	Costumes
+bean_creator.kind_accessories	Accessories
+bean_creator.kind_items	Items
+bean_creator.kind_emotes	Emotes
+bean_creator.name_hint	bean name...
+bean_creator.scale	Scale
+bean_creator.clear	Clear this slot
+bean_creator.nothing_loaded	Nothing is loaded yet. Open the game's own costume screen once, then search again.
+bean_creator.matches_fmt	{0} match(es)
+bean_creator.no_repo	No repository selected.
+bean_creator.fetching	Reading the repository...
+bean_creator.summary_fmt	Upper: {0}  Lower: {1}  Pattern: {2}  Faceplate: {3}  Colour: {4}  UGC: {5}  Textures: {6}
+pet.step_bean	Bean
+pet.bean_blurb	Open the bean creator to set this pet's look.
+pet.edit_bean	EDIT BEAN
+pet.look_summary_fmt	{0}   Upper: {1}   Lower: {2}   Pattern: {3}   Faceplate: {4}   Colour: {5}   Scale: {6}x   UGC pieces: {7}
+pet.none_yet	none yet
+pet.textures_applied_fmt	{0} texture(s) applied
+pet.phrase_count_fmt	{0} phrase(s)
+machinima.player_fallback_fmt	Player {0}
+machinima.round_row_fmt	{0}   {1}
+machinima.duration_fmt	{0}s
+machinima.yaw_fmt	{0}°
+bean_creator.scale_fmt	{0}x
+bean_creator.ugc_row_fmt	{0}   {1}
+bean_creator.search_failed_fmt	Cosmetic search failed: {0}
+bean_creator.textures	Textures
+bean_creator.no_textures	No skin texture entries saved. Make them in Customization, Skin Textures.
+bean_creator.bean_failed	The bean could not be built.
+bean_creator.fly_hint	Right mouse looks. WASD flies, Q and E drop and rise, Shift is faster.
+bean_creator.settings	Settings
+bean_creator.repo_fmt	Repository: {0}
+bean_creator.pick_repo	click to switch repository
+machinima.place_with_mouse	Place with mouse
+machinima.click_where_it_walks	Click where this player should walk to. Right click cancels.
+machinima.turn	Turn
+machinima.turn_on	Toward travel
+machinima.turn_off	Keep facing
+machinima.bake	BAKE MOVEMENT
+machinima.baking	Simulating the beans...

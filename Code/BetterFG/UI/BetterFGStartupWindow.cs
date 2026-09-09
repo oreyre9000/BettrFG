@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Reflection;
 using BetterFG.Services;
@@ -10,16 +10,6 @@ using BettrFG.uGUI;
 
 namespace BetterFG.UI
 {
-    /// <summary>
-    /// Full startup sequence:
-    ///   1. Load betterfg_startup bundle (contains wow/ui/reveal shader)
-    ///   2. Logo: wait 3s › fade in 2s + slight scale › fade out 2s
-    ///   3. Disclaimer text fades in 2s, button fades in ~2s later
-    ///   4. On "I understand": spawn old info window, animate revealer wipe 0›1 over 1s, destroy self
-    ///
-    /// Sorting: this canvas is 1001 — above tabs (999) and info window (1000).
-    /// Everything else is under the revealer until the wipe completes.
-    /// </summary>
     public class BetterFGStartupWindow : MonoBehaviour
     {
         public BetterFGStartupWindow(IntPtr ptr) : base(ptr) { }
@@ -28,12 +18,16 @@ namespace BetterFG.UI
         private const float LOGO_WAIT = 3f;
         private const float LOGO_FADE_IN = 2f;
         private const float LOGO_FADE_OUT = 2f;
+        private const float LANG_FADE_IN = 1.2f;
+        private const float LANG_FADE_OUT = 0.6f;
         private const float DISC_FADE_IN = 2f;
         private const float BTN_DELAY = 2f;
         private const float REVEAL_DUR = 1f;
+        private const float ONBOARD_HANDOFF = 1f;
 
         private const float LOGO_SCALE_FROM = 1.00f;
         private const float LOGO_SCALE_TO = 1.08f;
+        private const float LOGO_SCALE_END = 1.16f;
 
         // ── Layout ─────────────────────────────────────────────────────────────
         private const float LOGO_W = 420f;
@@ -42,11 +36,15 @@ namespace BetterFG.UI
         private const float DISC_H = 72f;
         private const float BTN_W = 190f;
         private const float BTN_H = 34f;
+        private const float LANG_W = 460f;
+        private const float LANG_H = 194f;
+        private const float LANG_DD_W = 240f;
+        private const float LANG_DD_H = 30f;
         private const int FS_DISC = 21;
         private const int FS_BTN = 13;
 
         // ── Keys ───────────────────────────────────────────────────────────────
-        private const string KEY_SEEN = "startup.seen";
+        public const string KEY_SEEN = "startup.seen";
 
         // ── Colors ─────────────────────────────────────────────────────────────
         private static readonly Color WHITE = UGUIShip.WHITE;
@@ -63,6 +61,12 @@ namespace BetterFG.UI
         private RectTransform _logoRt;
         private CanvasGroup _discGroup;
         private CanvasGroup _btnGroup;
+        private GameObject _langGo;
+        private CanvasGroup _langGroup;
+        private Button _langBtn;
+        private string[] _langCodes;
+        private System.Collections.Generic.List<string> _langNames;
+        private bool _langDone;
         private Image _revealerImg;
         private Material _revealMat;
 
@@ -115,7 +119,67 @@ namespace BetterFG.UI
 
             BuildRevealer(canvasGo.transform);
             BuildLogo(canvasGo.transform);
+            BuildLanguage(canvasGo.transform);
             BuildDisclaimer(canvasGo.transform);
+        }
+
+        private void BuildLanguage(Transform canvasT)
+        {
+            _langGo = new GameObject("Language");
+            _langGo.transform.SetParent(canvasT, false);
+
+            var rt = _langGo.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(LANG_W, LANG_H);
+            rt.anchoredPosition = Vector2.zero;
+
+            _langGroup = _langGo.AddComponent<CanvasGroup>();
+            _langGroup.alpha = 0f;
+            _langGroup.blocksRaycasts = false;
+            _langGroup.interactable = false;
+
+            UGUIShip.CreateLabel(_langGo.transform,
+                new Rect(0f, 0f, LANG_W, 32f),
+                "startup.choose_language", FS_DISC, WHITE, TextAnchor.MiddleCenter);
+
+            _langCodes = LocalizationService.AvailableLanguages;
+            _langNames = new System.Collections.Generic.List<string>();
+            var initial = new System.Collections.Generic.List<bool>();
+            foreach (var c in _langCodes)
+            {
+                _langNames.Add(LocalizationService.DisplayName(c));
+                initial.Add(c == LocalizationService.CurrentLanguage);
+            }
+
+            _langBtn = UGUIShip.CreateMultiSelectDropdown(_langGo.transform,
+                new Rect((LANG_W - LANG_DD_W) * 0.5f, 48f, LANG_DD_W, LANG_DD_H),
+                LocalizationService.DisplayName(LocalizationService.CurrentLanguage),
+                _langNames, initial, new Action<int, bool>(OnLanguagePicked),
+                FS_BTN, LANG_DD_W, 22f, true, true);
+
+            UGUIShip.CreateButton(_langGo.transform,
+                new Rect((LANG_W - BTN_W) * 0.5f, 160f, BTN_W, BTN_H),
+                "startup.continue", BTN_COLOR, BTN_TEXT, FS_BTN,
+                new Action(OnLanguageChosen));
+
+            _langGo.SetActive(false);
+        }
+
+        private void OnLanguagePicked(int index, bool on)
+        {
+            if (index < 0 || index >= _langCodes.Length) return;
+            LocalizationService.SetLanguage(_langCodes[index]);
+            var lbl = _langBtn.GetComponentInChildren<Text>();
+            if (lbl != null) UGUIShip.RelabelText(lbl, _langNames[index]);
+        }
+
+        private void OnLanguageChosen()
+        {
+            _langGroup.interactable = false;
+            _langGroup.blocksRaycasts = false;
+            _langDone = true;
         }
 
         private void BuildLogo(Transform canvasT)
@@ -181,6 +245,8 @@ namespace BetterFG.UI
             var hLayout = btnWrap.AddComponent<HorizontalLayoutGroup>();
             hLayout.childForceExpandWidth = false;
             hLayout.childForceExpandHeight = false;
+            hLayout.childControlWidth = false;
+            hLayout.childControlHeight = false;
             hLayout.childAlignment = TextAnchor.MiddleCenter;
 
             UGUIShip.CreateButton(btnWrap.transform,
@@ -231,8 +297,16 @@ namespace BetterFG.UI
             yield return LogoFadeScale(0f, 1f, LOGO_SCALE_FROM, LOGO_SCALE_TO, LOGO_FADE_IN);
 
             // Logo fade-out
-            yield return FadeGroup(_logoGroup, 1f, 0f, LOGO_FADE_OUT);
+            yield return LogoFadeScale(1f, 0f, LOGO_SCALE_TO, LOGO_SCALE_END, LOGO_FADE_OUT);
             _logoRt.gameObject.SetActive(false);
+
+            _langGo.SetActive(true);
+            yield return FadeGroup(_langGroup, 0f, 1f, LANG_FADE_IN);
+            _langGroup.blocksRaycasts = true;
+            _langGroup.interactable = true;
+            while (!_langDone) yield return null;
+            yield return FadeGroup(_langGroup, 1f, 0f, LANG_FADE_OUT);
+            _langGo.SetActive(false);
 
             // Disclaimer fade-in
             yield return FadeGroup(_discGroup, 0f, 1f, DISC_FADE_IN);
@@ -254,17 +328,20 @@ namespace BetterFG.UI
 
         private IEnumerator RevealSequence()
         {
-            // Spawn the info window — it's at sorting order 1000, under our revealer (1001)
-            BetterFGInfoWindow.Show();
-
             // Try assigning shader if it wasn't ready during Awake
             if (_revealMat == null)
                 TryAssignRevealMaterial();
 
             float elapsed = 0f;
+            bool handed = false;
             while (elapsed < REVEAL_DUR)
             {
                 elapsed += Time.unscaledDeltaTime;
+                if (!handed && elapsed >= ONBOARD_HANDOFF)
+                {
+                    handed = true;
+                    Features.Onboarding.OnboardingController.StartupDone = true;
+                }
                 float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / REVEAL_DUR));
                 SetRevealProgress(t);
                 yield return null;
@@ -272,6 +349,13 @@ namespace BetterFG.UI
             SetRevealProgress(1f);
 
             Time.timeScale = 1f;
+
+            if (!handed)
+            {
+                yield return WaitFor(ONBOARD_HANDOFF - elapsed);
+                Features.Onboarding.OnboardingController.StartupDone = true;
+            }
+
             UnityEngine.Object.Destroy(gameObject);
         }
 

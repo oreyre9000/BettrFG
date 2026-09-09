@@ -1,12 +1,10 @@
-using System;
+﻿using System;
 using System.Collections;
-using System.Runtime.InteropServices;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
 using BetterFG.Services;
 using FG.Common;
 using FGClient;
 using HarmonyLib;
-using Il2CppInterop.Runtime;
 using LevelEditor;
 
 namespace BetterFG.Features.CustomLights
@@ -69,8 +67,8 @@ namespace BetterFG.Features.CustomLights
             if (!n.StartsWith(CustomLights.MarkerName, StringComparison.Ordinal)
                 && !n.StartsWith(BetterFG.Features.CustomIntroCams.CustomIntroCams.MarkerName, StringComparison.Ordinal)) return;
 
-            CustomLights.Sync();
-            BetterFG.Features.CustomIntroCams.CustomIntroCams.Sync();
+            // loading a level registers every placeable in it, so this fires hundreds of times in a
+            // row - Sync() walks the whole scene, so coalesce into the one delayed ladder instead.
             CustomLights.SyncDelayed();
         }
     }
@@ -91,7 +89,10 @@ namespace BetterFG.Features.CustomLights
     {
         [HarmonyPrefix]
         public static bool Prefix(UnityEngine.GameObject go)
-            => !CustomLights.IsLightGO(go) && !BetterFG.Features.CustomIntroCams.CustomIntroCams.IsRigObject(go);
+        {
+            BetterFG.Utilities.BfgProbe.Hit("EnableOutline");
+            return !CustomLights.IsLightGO(go) && !BetterFG.Features.CustomIntroCams.CustomIntroCams.IsRigObject(go);
+        }
     }
 
     [HarmonyPatch(typeof(LevelEditorCollisionParameter), nameof(LevelEditorCollisionParameter.ApplyCollisionParam))]
@@ -102,23 +103,6 @@ namespace BetterFG.Features.CustomLights
         {
             var lepo = __instance.GetComponentInParent<LevelEditorPlaceableObject>();
             if (CustomLights.IsLight(lepo)) CustomLights.DecollideLight(lepo);
-        }
-    }
-
-    [HarmonyPatch(typeof(IL2CPP), nameof(IL2CPP.Il2CppStringToManaged))]
-    internal static class BadIl2CppStringGuard
-    {
-        [HarmonyPrefix]
-        public static bool Prefix(IntPtr il2CppString, ref string __result)
-        {
-            if (il2CppString == IntPtr.Zero) { __result = null; return false; }
-            try
-            {
-                int len = Marshal.ReadInt32(il2CppString, 16);
-                if (len < 0 || len > 0x100000) { __result = string.Empty; return false; }
-            }
-            catch { __result = string.Empty; return false; }
-            return true;
         }
     }
 }

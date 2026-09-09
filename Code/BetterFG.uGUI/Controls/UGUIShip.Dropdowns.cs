@@ -305,5 +305,104 @@ namespace BettrFG.uGUI
 
             return btn;
         }
+
+        // a menu-bar dropdown: same delux panel + zebra rows as the multi-select one, but each row
+        // is a one-shot action instead of a toggle, so no checkmarks and it always closes on pick.
+        // the panel sizes itself to the widest row label, clamped to ACTION_MENU_MAX_W.
+        public const float ACTION_MENU_MAX_W = 400f;
+
+        static Text _measure;
+
+        // one throwaway Text, styled exactly like the real ones, reused for sizing
+        public static float MeasureLabel(string id, int fontSize)
+        {
+            if (_measure == null)
+            {
+                var go = new GameObject("UGUIShip_Measure");
+                go.hideFlags = HideFlags.HideAndDontSave;
+                UnityEngine.Object.DontDestroyOnLoad(go);
+                go.AddComponent<RectTransform>();
+                _measure = go.AddComponent<Text>();
+                Stylize(_measure);
+                _measure.horizontalOverflow = HorizontalWrapMode.Overflow;
+                _measure.verticalOverflow = VerticalWrapMode.Overflow;
+            }
+            _measure.fontSize = fontSize;
+            _measure.text = LocText(id);
+            return PreferredWidth(_measure);
+        }
+
+        public static Button CreateActionDropdown(Transform parent, Rect rect, string label,
+            System.Collections.Generic.List<string> options, Action<int> onPick,
+            int fontSize = 10, float rowH = 20f, bool showAbove = false)
+        {
+            int n = options?.Count ?? 0;
+
+            // guessing from character count gets it wrong the moment the font changes, so the labels
+            // are built first and asked how wide they actually are
+            float w = rect.width;
+            for (int i = 0; i < n; i++)
+                w = Mathf.Max(w, MeasureLabel(options[i], fontSize) + 26f);
+            w = Mathf.Min(w, ACTION_MENU_MAX_W);
+
+            float panelH = rowH * n + 4f;
+            var btn = CreateButton(parent, rect, label, Color.black, Color.white, fontSize);
+
+            float panelY = showAbove ? rect.y - panelH - 2f : rect.y + rect.height + 2f;
+            var panelGo = new GameObject("ActionPanel");
+            panelGo.transform.SetParent(parent, false);
+            var pRt = panelGo.AddComponent<RectTransform>();
+            SetPixelRect(pRt, new Rect(rect.x, panelY, w, panelH));
+            var pImg = panelGo.AddComponent<Image>();
+            ApplyDeluxPanelDark(pImg, 2f);
+            pImg.raycastTarget = true;
+            panelGo.AddComponent<RectMask2D>();
+            panelGo.SetActive(false);
+
+            _openDropdownPanels.Add(panelGo);
+
+            btn.onClick.AddListener(new Action(() =>
+            {
+                bool show = !panelGo.activeSelf;
+                for (int k = _openDropdownPanels.Count - 1; k >= 0; k--)
+                {
+                    var p = _openDropdownPanels[k];
+                    if (p == null) { _openDropdownPanels.RemoveAt(k); continue; }
+                    if (p != panelGo) p.SetActive(false);
+                }
+                panelGo.SetActive(show);
+                if (show) panelGo.transform.SetAsLastSibling();
+            }));
+
+            for (int i = 0; i < n; i++)
+            {
+                int idx = i;
+                var rowGo = new GameObject("ActionRow_" + i);
+                rowGo.transform.SetParent(panelGo.transform, false);
+                SetPixelRect(rowGo.AddComponent<RectTransform>(), new Rect(2f, 2f + rowH * i, w - 4f, rowH));
+                var rImg = rowGo.AddComponent<Image>();
+                rImg.color = ROW_CLEAR;
+
+                var rowBtn = rowGo.AddComponent<Button>();
+                var nav = rowBtn.navigation; nav.mode = Navigation.Mode.None; rowBtn.navigation = nav;
+                rowBtn.targetGraphic = rImg;
+                PaintListRow(rowBtn, i, false);
+
+                var itemLbl = CreateLabel(rowGo.transform, new Rect(8f, 0f, w - 16f, rowH), options[i],
+                    fontSize, Color.white, TextAnchor.MiddleLeft);
+                itemLbl.raycastTarget = false;
+                itemLbl.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+                rowBtn.onClick.AddListener(new Action(() =>
+                {
+                    PlayClick();
+                    panelGo.SetActive(false);
+                    onPick?.Invoke(idx);
+                }));
+                WireButtonAudio(rowGo);
+            }
+
+            return btn;
+        }
     }
 }

@@ -163,6 +163,30 @@ namespace BettrFG.uGUI
             });
         }
 
+        // Text.preferredHeight measures in Arial, but a stylized label is DRAWN by its TMP mirror in
+        // the mod font, which is usually wider and wraps to more lines. anything sizing a panel around
+        // wrapped text has to ask the mirror or it lays out for fewer lines than the player sees.
+        public static float PreferredHeight(Text t, float width)
+        {
+            if (t == null) return 0f;
+            var mirror = t.transform.Find("TmpMirror");
+            var tmp = mirror != null ? mirror.GetComponent<TMPro.TextMeshProUGUI>() : null;
+            if (tmp == null) return t.preferredHeight;
+            return tmp.GetPreferredValues(t.text, width, 0f).y;
+        }
+
+        // same trap as PreferredHeight, on the other axis: the legacy Text measures Arial while the
+        // player sees the mod font, so anything sizing a panel to fit one line has to ask the mirror
+        public static float PreferredWidth(Text t)
+        {
+            if (t == null) return 0f;
+            var mirror = t.transform.Find("TmpMirror");
+            var tmp = mirror != null ? mirror.GetComponent<TMPro.TextMeshProUGUI>() : null;
+            if (tmp == null) return t.preferredWidth;
+            tmp.fontSize = t.fontSize;
+            return tmp.GetPreferredValues(t.text).x;
+        }
+
         // opt a label back out of the mod font — drop its TMP mirror and let the legacy Arial Text
         // render again. for the few surfaces that should stay Arial (tab titles).
         public static void Unstylize(Text t)

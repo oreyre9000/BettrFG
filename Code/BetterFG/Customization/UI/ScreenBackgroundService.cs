@@ -200,6 +200,16 @@ namespace BetterFG.Customization.UI
         public static Transform FindCirclesChild(Transform container) =>
             container.Find("Circles") ?? container.Find("Pattern");
 
+        private static List<Transform> PatternChildren(Transform container)
+        {
+            var list = new List<Transform>();
+            var circles = container.Find("Circles");
+            if (circles != null) list.Add(circles);
+            var pattern = container.Find("Pattern");
+            if (pattern != null) list.Add(pattern);
+            return list;
+        }
+
         private static float Get(string key, float def)
         {
             var ci = System.Globalization.CultureInfo.InvariantCulture;
@@ -243,7 +253,8 @@ namespace BetterFG.Customization.UI
         // "crown-tile" sprite stretched over the whole Area) — our season patterns are small repeating
         // motifs, so a custom pattern needs Image.Tiled + a much lower PPU multiplier to read as a
         // pattern instead of one giant stretched image. lower multiplier = bigger/fewer tiles.
-        public const float FinalRoundPatternTileScale = 0.25f;
+        public const float FinalRoundPatternTileScale = 0.5f;
+        public const float FallForcePatternTileScale = 0.08333333f;
         // Image.material does NOT auto-instance like Renderer.material — writing straight to it mutates
         // the shared Material asset every Circles instance (every screen) reads from. instance it once
         // per Circles Image and reuse that instance for apply/revert.
@@ -390,10 +401,12 @@ namespace BetterFG.Customization.UI
                 }
             }
 
-            var circles = FindCirclesChild(container);
-            var cimg = circles != null ? circles.GetComponent<Image>() : null;
-            if (cimg != null && cimg.material != null)
+            var painted = 0;
+            foreach (var circles in PatternChildren(container))
             {
+                var cimg = circles.GetComponent<Image>();
+                if (cimg == null || cimg.material == null) continue;
+                painted++;
                 int id = cimg.GetInstanceID();
                 if (!_origCirclesColor.ContainsKey(id)) _origCirclesColor[id] = cimg.color;
                 var ptex = LoadPatternTexture(SettingsService.Get(KeyPattern(s), ""));
@@ -416,7 +429,7 @@ namespace BetterFG.Customization.UI
                     {
                         cimg.sprite = Sprite.Create(ptex, new Rect(0, 0, ptex.width, ptex.height), new Vector2(0.5f, 0.5f));
                         cimg.type = Image.Type.Tiled;
-                        cimg.pixelsPerUnitMultiplier = FinalRoundPatternTileScale;
+                        cimg.pixelsPerUnitMultiplier = s == Screen.FallForce ? FallForcePatternTileScale : FinalRoundPatternTileScale;
                     }
                     else
                     {
@@ -425,6 +438,7 @@ namespace BetterFG.Customization.UI
                 }
                 cimg.color = PatternColor(s);
             }
+            if (painted == 0) Plugin.Log.LogWarning($"no pattern image under {container.name}, only the backdrop got painted");
         }
 
         // restore a container's backdrop sprite/colour + circles pattern to the game's originals.
@@ -441,10 +455,10 @@ namespace BetterFG.Customization.UI
                 if (_origBackdropColor.TryGetValue(id, out var col)) img.color = col;
             }
 
-            var circles = FindCirclesChild(container);
-            var cimg = circles != null ? circles.GetComponent<Image>() : null;
-            if (cimg != null && cimg.material != null)
+            foreach (var circles in PatternChildren(container))
             {
+                var cimg = circles.GetComponent<Image>();
+                if (cimg == null || cimg.material == null) continue;
                 int id = cimg.GetInstanceID();
                 if (cimg.material.HasProperty("_Pattern"))
                 {

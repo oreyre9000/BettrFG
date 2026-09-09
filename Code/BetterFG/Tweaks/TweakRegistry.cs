@@ -110,6 +110,7 @@ namespace BetterFG.Tweaks
             Add<ChangeFallGuysLogo>(TweakCategory.Misc);
             Add<ChangeSplashScreenTweak>(TweakCategory.Misc);
             Add<Background3dTweak>(TweakCategory.Misc);
+            Add<RetroGoopMaterialsTweak>(TweakCategory.Misc);
             //Add<AlwaysShowTimerTweak>(TweakCategory.Misc);
             //Add<RefocusGame>(TweakCategory.Misc);
         }

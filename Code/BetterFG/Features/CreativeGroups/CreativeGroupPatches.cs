@@ -1,4 +1,4 @@
-using FG.Common;
+﻿using FG.Common;
 using FG.Common.Fraggle;
 using HarmonyLib;
 using LevelEditor;
@@ -63,7 +63,11 @@ namespace BetterFG.Features.CreativeGroups
     internal static class CreativeGroupUndoPatch
     {
         [HarmonyPostfix]
-        public static void Postfix() => CreativeGroups.OnUndoRedoSettled();
+        public static void Postfix()
+        {
+            CreativeGroups.OnUndoRedoSettled();
+            BetterFG.Features.CustomBackgrounds.DisableBackgroundRulebook.Invalidate();
+        }
     }
 
     [HarmonyPatch(typeof(LevelEditorRecordChanges), nameof(LevelEditorRecordChanges.GetNameForDisplay))]

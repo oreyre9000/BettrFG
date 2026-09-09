@@ -57,14 +57,6 @@ namespace BetterFG.Customization.Player
     {
         // keyed by bean instance id — original materials per renderer before we touched them
         private Dictionary<int, List<CustomTexOriginal>> customTexOriginals = new Dictionary<int, List<CustomTexOriginal>>();
-        private HashSet<int> customTexPollingBeans = new HashSet<int>();
-        // beans we've already made our one real custom-tex attempt on (their GEO was fully built).
-        // the game fires BindMeshToFallguy once per mesh, constantly (idle anim / LOD), and every
-        // fire re-arms the reapply poll. without this, a bean whose costume DOESN'T contain the
-        // target material never lands in customTexOriginals, so it re-polls forever -> the steady
-        // background freeze after a texture is applied. cleared on revert so a settings/costume
-        // change re-attempts cleanly.
-        private HashSet<int> customTexAttemptedBeans = new HashSet<int>();
         // was a fixed 4-name list (_MainTex/_BaseMap/etc) - now reads every texture slot the
         // shader actually declares, so metallic/normal/emission maps show up too, not just albedo
         public static IEnumerable<string> GetTextureProps(Material mat)
@@ -133,7 +125,16 @@ namespace BetterFG.Customization.Player
         public static int EntryCount
             => int.TryParse(SettingsService.Get(KEY_ENTRY_COUNT, "0"), out int c) ? c : 0;
 
-        public static List<SkinTexEntry> LoadEntries() => ReadTexEntries(SettingsService.Get);
+        private static List<SkinTexEntry> _entriesCache;
+        private static int _entriesCacheVersion = -1;
+
+        public static List<SkinTexEntry> LoadEntries()
+        {
+            if (_entriesCache != null && _entriesCacheVersion == SettingsService.Version) return _entriesCache;
+            _entriesCache = ReadTexEntries(SettingsService.Get);
+            _entriesCacheVersion = SettingsService.Version;
+            return _entriesCache;
+        }
 
         // keyPrefix/countKey are pluggable so a non-global owner (a pet's own skin textures) can
         // reuse this exact serialization shape under its own settings keys instead of the shared
@@ -836,61 +837,46 @@ namespace BetterFG.Customization.Player
             int beanId = bean.GetInstanceID();
             if (customTexOriginals.ContainsKey(beanId)) return 0;
 
+            var geo = FindBeanGEO(bean);
+            if (geo == null) return 0;
+
             int total = 0;
-            foreach (var entry in LoadEntries())
+            foreach (var r in geo.GetComponentsInChildren<Renderer>(true))
+                if (ApplyEnabledEntriesToRenderer(bean, r)) total++;
+            return total;
+        }
+
+        public bool ApplyEnabledEntriesToRenderer(GameObject bean, Renderer r)
+        {
+            if (bean == null || r == null) return false;
+            var entries = LoadEntries();
+            if (entries.Count == 0) return false;
+
+            int beanId = bean.GetInstanceID();
+            bool hadTex = customTexOriginals.TryGetValue(beanId, out var texOriginals);
+            if (texOriginals == null) texOriginals = new List<CustomTexOriginal>();
+            bool hadProps = customPropOriginals.TryGetValue(beanId, out var propOriginals);
+            if (propOriginals == null) propOriginals = new List<CustomPropOriginal>();
+
+            bool touchedTex = false, touchedProps = false;
+            foreach (var entry in entries)
             {
-                if (!entry.enabled) continue;
+                if (!entry.enabled || SkinTexCategory.IsOptionField(entry.category)) continue;
                 foreach (var ov in entry.overrides)
                 {
                     if (string.IsNullOrEmpty(ov.texName)) continue;
                     var tex = GetCachedCustomTex(ov);
-                    if (tex != null) total += ApplyCustomTexture(bean, 0, tex, new HashSet<string> { ov.texName });
+                    if (tex == null) continue;
+                    int texSlot = 0;
+                    if (ApplyTextureToRenderer(r, 0, tex, new HashSet<string> { ov.texName }, texOriginals, ref texSlot))
+                        touchedTex = true;
                 }
-                total += ApplyMatProps(bean, entry.matProps);
+                if (ApplyMatPropsToRenderer(r, entry.matProps, propOriginals)) touchedProps = true;
             }
-            return total;
-        }
 
-        public void PollAndReapplyCustomTextureForBean(GameObject bean)
-        {
-            if (bean == null) return;
-            // nothing saved to reapply -> don't spin a poll coroutine that scans the bean's renderers
-            // every 0.5s for nothing. the game rebinds costume meshes constantly (animation/LOD) and
-            // every rebind re-arms this via the BindMeshToFallguy postfix, so without this gate a
-            // game-cosmetics-only loadout still pays a steady background poll.
-            if (EntryCount <= 0) return;
-            int beanId = bean.GetInstanceID();
-            if (customTexOriginals.ContainsKey(beanId) || customTexPollingBeans.Contains(beanId) || customTexAttemptedBeans.Contains(beanId)) return;
-            customTexPollingBeans.Add(beanId);
-            StartCoroutine(PollReapplyCoroutine(bean).WrapToIl2Cpp());
-        }
-
-        private IEnumerator PollReapplyCoroutine(GameObject bean)
-        {
-            float elapsed = 0f;
-            int beanId = bean != null ? bean.GetInstanceID() : 0;
-            while (elapsed < 10f)
-            {
-                if (bean == null) break;
-                if (customTexOriginals.ContainsKey(beanId)) break;
-
-                var geo = FindBeanGEO(bean);
-                if (geo != null && geo.GetComponentsInChildren<Renderer>(true).Length > 0)
-                {
-                    // bean is fully built — this is our one real attempt. whether or not a texture
-                    // matched, a material that isn't on this bean won't appear by polling longer.
-                    // mark attempted so the constant BindMeshToFallguy postfix doesn't re-arm us.
-                    customTexAttemptedBeans.Add(beanId);
-                    TryAutoReapplyCustomTextureForBean(bean);
-                    break;
-                }
-                yield return new WaitForSeconds(0.5f);
-                elapsed += 0.5f;
-            }
-            if (bean != null && !customTexOriginals.ContainsKey(beanId))
-                Plugin.Log.LogWarning($"PollReapply no texture matched for {bean.name}");
-            if (beanId != 0)
-                customTexPollingBeans.Remove(beanId);
+            if (touchedTex && !hadTex) customTexOriginals[beanId] = texOriginals;
+            if (touchedProps && !hadProps) customPropOriginals[beanId] = propOriginals;
+            return touchedTex || touchedProps;
         }
 
 
@@ -915,58 +901,59 @@ namespace BetterFG.Customization.Player
                 originalList = new List<CustomTexOriginal>();
 
             foreach (var r in renderers)
-            {
-                if (r == null) continue;
-                var mats = r.materials;
-                if (mats == null) continue;
-                bool touched = false;
+                if (ApplyTextureToRenderer(r, matSlotIdx, tex, matchTexNames, originalList, ref texSlot)) count++;
 
-                for (int i = 0; i < mats.Length; i++)
-                {
-                    var m = mats[i];
-                    if (m == null) continue;
-
-                    bool hadTextureSlot = false;
-
-                    foreach (var prop in GetTextureProps(m))
-                    {
-                        try
-                        {
-                            var originalTex = FindCustomTexOriginal(originalList, r, i, prop, out string savedName);
-                            if (originalTex == null)
-                                originalTex = m.GetTexture(prop);
-                            if (originalTex == null) continue;
-
-                            hadTextureSlot = true;
-                            string originalTexName = savedName ?? originalTex.name ?? "";
-                            string matName = CleanMatName(m.name);
-                            bool hasNameFilter = matchTexNames != null && matchTexNames.Count > 0;
-                            bool nameMatch = hasNameFilter && (matchTexNames.Contains(originalTexName) || matchTexNames.Contains(matName));
-                            if (hasNameFilter ? !nameMatch : texSlot != matSlotIdx) continue;
-
-                            RememberCustomTexOriginal(originalList, r, i, prop, originalTex, originalTexName);
-
-                            if (!string.IsNullOrEmpty(originalTexName))
-                                tex.name = originalTexName;
-                            m.SetTexture(prop, tex);
-                            touched = true;
-                            break;
-                        }
-                        catch { }
-                    }
-
-                    if (hadTextureSlot) texSlot++;
-                }
-
-                if (touched)
-                {
-                    r.materials = mats;
-                    count++;
-                }
-            }
             if (count > 0 && !alreadyHadOriginals)
                 customTexOriginals[beanId] = originalList;
             return count;
+        }
+
+        private bool ApplyTextureToRenderer(Renderer r, int matSlotIdx, Texture2D tex, HashSet<string> matchTexNames, List<CustomTexOriginal> originalList, ref int texSlot)
+        {
+            if (r == null) return false;
+            var mats = r.materials;
+            if (mats == null) return false;
+            bool touched = false;
+
+            for (int i = 0; i < mats.Length; i++)
+            {
+                var m = mats[i];
+                if (m == null) continue;
+
+                bool hadTextureSlot = false;
+
+                foreach (var prop in GetTextureProps(m))
+                {
+                    try
+                    {
+                        var originalTex = FindCustomTexOriginal(originalList, r, i, prop, out string savedName);
+                        if (originalTex == null)
+                            originalTex = m.GetTexture(prop);
+                        if (originalTex == null) continue;
+
+                        hadTextureSlot = true;
+                        string originalTexName = savedName ?? originalTex.name ?? "";
+                        string matName = CleanMatName(m.name);
+                        bool hasNameFilter = matchTexNames != null && matchTexNames.Count > 0;
+                        bool nameMatch = hasNameFilter && (matchTexNames.Contains(originalTexName) || matchTexNames.Contains(matName));
+                        if (hasNameFilter ? !nameMatch : texSlot != matSlotIdx) continue;
+
+                        RememberCustomTexOriginal(originalList, r, i, prop, originalTex, originalTexName);
+
+                        if (!string.IsNullOrEmpty(originalTexName))
+                            tex.name = originalTexName;
+                        m.SetTexture(prop, tex);
+                        touched = true;
+                        break;
+                    }
+                    catch { }
+                }
+
+                if (hadTextureSlot) texSlot++;
+            }
+
+            if (touched) r.materials = mats;
+            return touched;
         }
 
         // scans bean GEO for materials whose (cleaned) name matches, sets the color/float
@@ -987,42 +974,43 @@ namespace BetterFG.Customization.Player
                 originalList = new List<CustomPropOriginal>();
 
             foreach (var r in renderers)
-            {
-                if (r == null) continue;
-                var mats = r.materials;
-                if (mats == null) continue;
-                bool touched = false;
+                if (ApplyMatPropsToRenderer(r, props, originalList)) count++;
 
-                for (int i = 0; i < mats.Length; i++)
-                {
-                    var m = mats[i];
-                    if (m == null) continue;
-                    string matName = CleanMatName(m.name);
-
-                    foreach (var po in props)
-                    {
-                        if (po.matName != matName || !m.HasProperty(po.prop)) continue;
-                        try
-                        {
-                            RememberCustomPropOriginal(originalList, r, i, po.prop, po.kind, m);
-                            if (po.kind == "color") m.SetColor(po.prop, new Color(po.x, po.y, po.z, po.w));
-                            else if (po.kind == "vector") m.SetVector(po.prop, new Vector4(po.x, po.y, po.z, po.w));
-                            else m.SetFloat(po.prop, po.f);
-                            touched = true;
-                        }
-                        catch { }
-                    }
-                }
-
-                if (touched)
-                {
-                    r.materials = mats;
-                    count++;
-                }
-            }
             if (count > 0 && !alreadyHadOriginals)
                 customPropOriginals[beanId] = originalList;
             return count;
+        }
+
+        private bool ApplyMatPropsToRenderer(Renderer r, List<MatPropOverride> props, List<CustomPropOriginal> originalList)
+        {
+            if (r == null || props == null || props.Count == 0) return false;
+            var mats = r.materials;
+            if (mats == null) return false;
+            bool touched = false;
+
+            for (int i = 0; i < mats.Length; i++)
+            {
+                var m = mats[i];
+                if (m == null) continue;
+                string matName = CleanMatName(m.name);
+
+                foreach (var po in props)
+                {
+                    if (po.matName != matName || !m.HasProperty(po.prop)) continue;
+                    try
+                    {
+                        RememberCustomPropOriginal(originalList, r, i, po.prop, po.kind, m);
+                        if (po.kind == "color") m.SetColor(po.prop, new Color(po.x, po.y, po.z, po.w));
+                        else if (po.kind == "vector") m.SetVector(po.prop, new Vector4(po.x, po.y, po.z, po.w));
+                        else m.SetFloat(po.prop, po.f);
+                        touched = true;
+                    }
+                    catch { }
+                }
+            }
+
+            if (touched) r.materials = mats;
+            return touched;
         }
 
         private static void RememberCustomPropOriginal(List<CustomPropOriginal> originals, Renderer renderer, int matIdx, string prop, string kind, Material m)
@@ -1112,9 +1100,6 @@ namespace BetterFG.Customization.Player
             RevertMatProps(bean);
 
             int beanId = bean.GetInstanceID();
-            // always re-enable a fresh attempt next time the bean rebinds — even for beans that
-            // never matched (those aren't in customTexOriginals but DID get marked attempted)
-            customTexAttemptedBeans.Remove(beanId);
             if (!customTexOriginals.TryGetValue(beanId, out var originals)) return;
 
             foreach (var o in originals)

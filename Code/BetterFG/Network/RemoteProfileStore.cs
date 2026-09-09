@@ -97,6 +97,9 @@ namespace BetterFG.Network
             if (_byKey.TryGetValue(key, out var p)) return p;
             string cleaned = PlayerUtils.CleanPlayerName(key);
             if (cleaned != key && _byKey.TryGetValue(cleaned, out var pc)) return pc;
+            foreach (var kv in _byKey)
+                if (PlayerUtils.CleanPlayerName(kv.Key).Equals(cleaned, StringComparison.OrdinalIgnoreCase))
+                    return kv.Value;
             return null;
         }
 

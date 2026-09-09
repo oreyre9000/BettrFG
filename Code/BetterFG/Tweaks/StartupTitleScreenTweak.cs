@@ -16,6 +16,12 @@ namespace BetterFG.Tweaks
 
         public static StartupTitleScreenTweak Instance { get; private set; }
         void Awake() => Instance = this;
+
+        // first boot runs the title screen whether or not the tweak is switched on, so the startup
+        // sequence and the tour have the menu to themselves. Plugin.Load sets it, the tour clears it.
+        public static bool ForceOn;
+
+        public static bool Active => ForceOn || (Instance != null && Instance.IsEnabled);
     }
 
     // the title screen is gated by background login, not SkipTitleScreen — if background login can
@@ -27,8 +33,7 @@ namespace BetterFG.Tweaks
         [HarmonyPrefix]
         public static bool CanStartBackgroundLogin(ref bool __result)
         {
-            var tweak = StartupTitleScreenTweak.Instance;
-            if (tweak == null || !tweak.IsEnabled) return true;
+            if (!StartupTitleScreenTweak.Active) return true;
 
             __result = false;
             return false;
@@ -43,8 +48,7 @@ namespace BetterFG.Tweaks
         [HarmonyPostfix]
         public static void Postfix()
         {
-            var tweak = StartupTitleScreenTweak.Instance;
-            if (tweak == null || !tweak.IsEnabled) return;
+            if (!StartupTitleScreenTweak.Active) return;
 
             var go = GameObject.Find("UICanvas_Client_V2(Clone)/Default/Topbar_Prime(Clone)");
             if (go != null) go.SetActive(false);

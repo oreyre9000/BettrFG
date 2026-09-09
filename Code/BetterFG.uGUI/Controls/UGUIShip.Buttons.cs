@@ -43,6 +43,9 @@ namespace BettrFG.uGUI
                     cols.normalColor = bgColor * DeluxNormal;
                     cols.highlightedColor = bgColor * DeluxHover;
                     cols.pressedColor = bgColor * DeluxPressed;
+                    // Unity's default disabledColor is a bright grey, so a button inside a
+                    // CanvasGroup that isn't interactable yet (the startup fades) lights up.
+                    cols.disabledColor = bgColor * DeluxNormal;
                     btn.colors = cols;
                     btn.targetGraphic = fimg;
                     return false;
@@ -58,6 +61,7 @@ namespace BettrFG.uGUI
             cols.normalColor = bgColor;
             cols.highlightedColor = bgColor * 1.2f;
             cols.pressedColor = bgColor * 0.7f;
+            cols.disabledColor = bgColor;
             btn.colors = cols;
             return customSprite;
         }

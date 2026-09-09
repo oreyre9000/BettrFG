@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -229,7 +229,10 @@ namespace BetterFG.Customization.Player
             // warm the cache with this cosmetic's mask, then stamp both slots from current state
             yield return LoadCostumeMaskCoroutine(slot.option, "ui.mask", r => { }).WrapToIl2Cpp();
             RestampBeanMasks(bean);
-            ApplyGameColourPatternToBean(bean);
+            // activeColour/Pattern/Faceplate are LOCAL player state - stamping them on a profile bean
+            // paints your own colour on someone else's fall guy. the profile pipeline applies that
+            // bean's own colour around this loop itself.
+            if (!slot.remotePipeline) ApplyGameColourPatternToBean(bean);
 
             KillExistingAppliedAtKey(pendingKey);
             appliedSkins[pendingKey] = new AppliedSkinInfo { instance = clone, bean = bean, type = SkinType.Costume, disabledChildren = disabled, boundRenderers = boundRenderers, addressableInstance = true };

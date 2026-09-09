@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
 using BetterFG.Services;
@@ -38,17 +38,27 @@ namespace BetterFG.Features.CustomBackgrounds
             return null;
         }
 
+        private static bool? _disabled;
+
+        internal static void Invalidate() => _disabled = null;
+
         internal static bool IsDisabled()
         {
-            if (FindMarker() != null) return true;
-            foreach (var m in IdentifierObjects.ReadRound(Definers.DefinerName))
-                if (string.Equals(m.Hex, MarkerHex, StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
+            if (_disabled.HasValue) return _disabled.Value;
+
+            bool on = FindMarker() != null;
+            if (!on)
+                foreach (var m in IdentifierObjects.ReadRound(Definers.DefinerName))
+                    if (string.Equals(m.Hex, MarkerHex, StringComparison.OrdinalIgnoreCase)) { on = true; break; }
+
+            _disabled = on;
+            return on;
         }
 
         internal static void Toggle()
         {
             bool on = !IsDisabled();
+            _disabled = on;
             var existing = FindMarker();
             if (on) { if (existing == null) IdentifierObjects.Spawn(Definers.DefinerName, MarkerPos, Vector3.zero, Vector3.one, MarkerHex); }
             else if (existing != null) IdentifierObjects.Remove(existing);

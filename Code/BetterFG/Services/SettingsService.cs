@@ -10,6 +10,7 @@ namespace BetterFG.Services
     {
         private static readonly string OldSettingsDir;
         private static readonly string SettingsDir;
+        public static readonly string ExportsDir;
         private static readonly string BackupDir;
         private static readonly string OldFilePath;
         private static readonly string FilePath;
@@ -41,6 +42,7 @@ namespace BetterFG.Services
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             OldSettingsDir = Path.Combine(dllDir, "Settings");
             SettingsDir = Path.Combine(appData, "BettrFG", "Settings");
+            ExportsDir = Path.Combine(appData, "BettrFG", "Exports");
             BackupDir = Path.Combine(SettingsDir, "Backup");
             OldFilePath = Path.Combine(OldSettingsDir, "last.txt");
             FilePath = Path.Combine(SettingsDir, "last.txt");
@@ -60,18 +62,21 @@ namespace BetterFG.Services
             return _data.TryGetValue(key, out var v) ? v : defaultValue;
         }
 
+        public static int Version { get; private set; }
+
         public static void Set(string key, string value)
         {
             EnsureLoaded();
             _data[key] = value ?? "";
             _dirtySinceBackup = true;
             _pendingWrite = true;
+            Version++;
         }
 
         public static void Remove(string key)
         {
             EnsureLoaded();
-            if (_data.Remove(key)) _pendingWrite = true;
+            if (_data.Remove(key)) { _pendingWrite = true; Version++; }
         }
 
         // Set used to rewrite the whole file on every call, so anything that saved a LIST paid one
@@ -108,6 +113,7 @@ namespace BetterFG.Services
             if (values != null)
                 foreach (var kv in values) _data[kv.Key] = kv.Value ?? "";
             _pendingWrite = false;
+            Version++;
             Save();
         }
 

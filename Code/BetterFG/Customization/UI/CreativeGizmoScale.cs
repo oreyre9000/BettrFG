@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using BetterFG.Services;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BetterFG.Customization.UI
@@ -27,10 +28,33 @@ namespace BetterFG.Customization.UI
             _factor = Scale;
             _written.Clear();
 
+            if (_factor == 1f) Remove(); else Install();
+
             var mgr = LevelEditorWorldSpaceUIManager.Instance;
             var live = mgr != null ? mgr._activeWorldSpaceUIElements : null;
             if (live == null) return;
             for (int i = 0; i < live.Count; i++) Rescale(live[i]);
+        }
+
+        private static Harmony _harmony;
+
+        public static void Postfix(LevelEditorWorldSpaceUI __instance) => Rescale(__instance);
+
+        private static void Install()
+        {
+            if (_harmony != null) return;
+            var target = AccessTools.Method(typeof(LevelEditorWorldSpaceUI), nameof(LevelEditorWorldSpaceUI.Update));
+            if (target == null) { Plugin.Log.LogWarning("gizmo scale: no LevelEditorWorldSpaceUI.Update to hook"); return; }
+            _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID + ".creative.gizmoscale");
+            _harmony.Patch(target, postfix: new HarmonyMethod(AccessTools.Method(typeof(CreativeGizmoScale), nameof(Postfix))));
+        }
+
+        private static void Remove()
+        {
+            if (_harmony == null) return;
+            try { _harmony.UnpatchSelf(); }
+            catch (Exception ex) { Plugin.Log.LogWarning($"gizmo scale: unpatch threw, moving on: {ex.Message}"); }
+            _harmony = null;
         }
 
         internal static void Rescale(LevelEditorWorldSpaceUI marker)

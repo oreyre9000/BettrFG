@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BetterFG.Services;
@@ -261,7 +261,6 @@ namespace BetterFG.UI
         public bool instant = false;
         // per-instance delay override. negative = fall back to the shared Tooltip.HoverDelay.
         public float delay = -1f;
-        public bool tabSwitch = false;
         // optional: a UI image (usually a faint background behind the trigger's label) shown only
         // while hovered, so the user can see something is hoverable before the tooltip pops.
         public GameObject hoverImage;
@@ -300,13 +299,6 @@ namespace BetterFG.UI
             // hid whatever was up), and there's one of these on every tweak row — so take the managed
             // bool check before any of the il2cpp work below.
             if (!instant && BetterFGUIMan.Instance != null && !BetterFGUIMan.Instance.IsVisible) { _t = 0f; return; }
-
-            if (tabSwitch && SettingsService.Get(Tab.KEY_TAB_SWITCH_TOOLTIP, "true") != "true")
-            {
-                if (_shown) { BetterFGUIMan.Instance?.HideTooltip(); _shown = false; }
-                _t = 0f;
-                return;
-            }
 
             if (!BetterFGUIMan.UnityMouseReady())
             {
@@ -441,7 +433,7 @@ namespace BetterFG.UI
         {
             get
             {
-                int v = int.TryParse(Services.SettingsService.Get(KEY_BACKDROP, "0"), out int i) ? i : 0;
+                int v = int.TryParse(Services.SettingsService.Get(KEY_BACKDROP, "1"), out int i) ? i : 1;
                 return Mathf.Clamp(v, 0, BackdropPatterns.Length - 1);
             }
         }
@@ -457,6 +449,7 @@ namespace BetterFG.UI
         }
         private GameObject _watermarkGo;
         private GameObject _controlsWatermarkGo;
+        private GameObject _newsGo;
         private GameObject _creativeHintGo;
         private TextMeshProUGUI _creativeHintText;
         private CanvasGroup _rootCg;
@@ -536,6 +529,8 @@ namespace BetterFG.UI
                 SettingsService.Flush();
                 SettingsService.TickBackup();
             }
+
+            NewsFeed.Tick();
 
             if (!IsTyping())
             {
@@ -817,6 +812,7 @@ namespace BetterFG.UI
             BuildTooltipWidget();
             BuildWatermark();
             BuildControlsWatermark();
+            _newsGo = NewsFeed.Build(_canvas.transform);
             BuildCreativeInputHint();
         }
 
@@ -957,6 +953,7 @@ namespace BetterFG.UI
             if (_backdropGo != null) _backdropGo.SetActive(on);
             if (_watermarkGo != null) _watermarkGo.SetActive(on);
             if (_controlsWatermarkGo != null) _controlsWatermarkGo.SetActive(on);
+            if (_newsGo != null) _newsGo.SetActive(on);
             if (_chromeSuppressed && _creativeHintGo != null) _creativeHintGo.SetActive(false);
         }
 
@@ -1503,13 +1500,12 @@ namespace BetterFG.UI
 
         // like MakeObjectTooltip but tracks LocalizationService.LanguageChanged, for tooltips
         // built once (e.g. at tab creation) that need to stay correct across a live language switch.
-        public static void MakeLocalizedObjectTooltip(RectTransform rt, string locId, object[] args = null, float delay = -1f, bool tabSwitch = false)
+        public static void MakeLocalizedObjectTooltip(RectTransform rt, string locId, object[] args = null, float delay = -1f)
         {
             var t = rt.gameObject.AddComponent<TooltipTrigger>();
             t.locId = locId;
             t.locArgs = args;
             t.delay = delay;
-            t.tabSwitch = tabSwitch;
             t.InstallLoc();
         }
 
@@ -1786,7 +1782,7 @@ namespace BetterFG.UI
             rt.anchorMax = new Vector2(0.25f, 1f);
             rt.pivot = new Vector2(0f, 1f);
             rt.anchoredPosition = new Vector2(0f, -16f);
-            rt.sizeDelta = new Vector2(600f, 48f);
+            rt.sizeDelta = new Vector2(760f, 76f);
 
             var vlg = _watermarkGo.AddComponent<VerticalLayoutGroup>();
             vlg.childForceExpandWidth = true;
@@ -1795,7 +1791,7 @@ namespace BetterFG.UI
 
             var csf = _watermarkGo.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
             AddWatermarkLine(BetterFGInfo.WatermarkLine1, new Color(1f, 1f, 1f, 0.28f));
             AddWatermarkLogoLine(BetterFGInfo.WatermarkLine2, new Color(1f, 1f, 1f, 0.28f));
@@ -1809,17 +1805,17 @@ namespace BetterFG.UI
             var row = new GameObject("WMLogoLine");
             row.transform.SetParent(_watermarkGo.transform, false);
             row.AddComponent<RectTransform>();
-            row.AddComponent<LayoutElement>().preferredHeight = 18f;
+            row.AddComponent<LayoutElement>().preferredHeight = 32f;
             var hlg = row.AddComponent<HorizontalLayoutGroup>();
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = false;
             hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.spacing = 5f;
 
-            var tex = BetterFG.Utilities.EmbeddedResourceandUnity.LoadTexture("BetterFG.assets.ui.betterfglogo.png");
+            var tex = WatermarkLogoTexture();
             if (tex != null)
             {
-                float h = 16f, w = h * ((float)tex.width / tex.height);
+                float h = 28f, w = h * ((float)tex.width / tex.height);
                 var logo = new GameObject("WMLogo");
                 logo.transform.SetParent(row.transform, false);
                 logo.AddComponent<RectTransform>().sizeDelta = new Vector2(w, h);
@@ -1833,7 +1829,30 @@ namespace BetterFG.UI
             }
 
             var t = UGUIShip.CreateLabel(row.transform, default, text, 12, color, TextAnchor.MiddleLeft);
-            t.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var tle = t.gameObject.AddComponent<LayoutElement>();
+            tle.preferredHeight = 32f;
+            tle.flexibleWidth = 1f;
+        }
+
+        // the source png is far bigger than the 16px the watermark draws it at, and LoadTexture builds
+        // textures without mips, so the downscale aliases. rebuild it once with a mip chain.
+        private static Texture2D _wmLogoTex;
+        private static Texture2D WatermarkLogoTexture()
+        {
+            if (_wmLogoTex != null) return _wmLogoTex;
+
+            var src = BetterFG.Utilities.EmbeddedResourceandUnity.LoadTexture("BetterFG.assets.ui.betterfglogo.png");
+            if (src == null) return null;
+
+            var mipped = new Texture2D(src.width, src.height, TextureFormat.RGBA32, true);
+            mipped.SetPixels(src.GetPixels());
+            mipped.Apply(true);
+            mipped.filterMode = FilterMode.Trilinear;
+            mipped.anisoLevel = 8;
+            mipped.wrapMode = TextureWrapMode.Clamp;
+            mipped.hideFlags = HideFlags.HideAndDontSave;
+            _wmLogoTex = mipped;
+            return _wmLogoTex;
         }
 
         private void BuildControlsWatermark()
@@ -1845,17 +1864,17 @@ namespace BetterFG.UI
             rt.anchorMin = new Vector2(0f, 1f);
             rt.anchorMax = new Vector2(0f, 1f);
             rt.pivot = new Vector2(0f, 1f);
-            rt.anchoredPosition = new Vector2(16f, -92f);
-            rt.sizeDelta = new Vector2(420f, 64f);
+            rt.anchoredPosition = new Vector2(16f, -124f);
+            rt.sizeDelta = new Vector2(620f, 96f);
 
             var vlg = _controlsWatermarkGo.AddComponent<VerticalLayoutGroup>();
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
-            vlg.spacing = 1f;
+            vlg.spacing = 2f;
 
             var csf = _controlsWatermarkGo.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
             PopulateControlsWatermark();
             KeybindService.OnRebound += _ => PopulateControlsWatermark();
@@ -1869,8 +1888,10 @@ namespace BetterFG.UI
 
             var faded = new Color(1f, 1f, 1f, 0.8f);
             AddWatermarkLine(_controlsWatermarkGo.transform, "ui.f1_lock_unlock_cursor", faded);
-            AddWatermarkLine(_controlsWatermarkGo.transform, KeybindService.Label(KeybindId.ToggleUI) + " - hide/show BetterFG UI", faded);
-            AddWatermarkLine(_controlsWatermarkGo.transform, KeybindService.Label(KeybindId.ToggleWheel) + " - toggle settings wheel", faded);
+            AddWatermarkLine(_controlsWatermarkGo.transform,
+                LocalizationService.Format("watermark.toggle_ui", KeybindService.Label(KeybindId.ToggleUI)), faded);
+            AddWatermarkLine(_controlsWatermarkGo.transform,
+                LocalizationService.Format("watermark.toggle_wheel", KeybindService.Label(KeybindId.ToggleWheel)), faded);
         }
 
         // ── Input-restricted hint ──────────────────────────────────────────────
@@ -1959,7 +1980,7 @@ namespace BetterFG.UI
             if (string.IsNullOrWhiteSpace(text)) return;
 
             var t = UGUIShip.CreateFlowLabel(parent, text, 12, color);
-            t.GetComponent<LayoutElement>().preferredHeight = 18f;
+            t.GetComponent<LayoutElement>().preferredHeight = 22f;
         }
 
         private static Canvas CreateCanvas()

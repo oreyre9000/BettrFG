@@ -484,6 +484,27 @@ namespace BetterFG.Patches
         void OnEnable() => MenuCustomizationApplication.Instance?.RefreshCreativeCanvas(transform);
     }
 
+    public class MenuPatternAlphaMirror : MonoBehaviour
+    {
+        public MenuPatternAlphaMirror(IntPtr ptr) : base(ptr) { }
+        void LateUpdate() => MenuCustomizationApplication.SyncPatternAlpha();
+    }
+
+    [HarmonyPatch(typeof(MainMenuSkyboxHandler), nameof(MainMenuSkyboxHandler.SetSkybox))]
+    internal static class MenuSkyboxIdOverridePatch
+    {
+        [HarmonyPrefix]
+        static void Prefix(ref string skyboxId) => MenuCustomizationApplication.RewriteBaseSkyboxId(ref skyboxId);
+    }
+
+    [HarmonyPatch(typeof(LevelEditorThemeLighting), nameof(LevelEditorThemeLighting.Apply))]
+    internal static class MenuThemeLightingApplyPatch
+    {
+        [HarmonyPostfix]
+        static void Postfix(LevelEditorThemeLighting __instance) =>
+            MenuCustomizationApplication.OnBaseLightingApplied(__instance.gameObject);
+    }
+
     [HarmonyPatch(typeof(MainMenuBackgroundViewModel), nameof(MainMenuBackgroundViewModel.AssignBgFromCMS))]
     internal static class MainMenuBackgroundAssignBgFromCMSPatch
     {

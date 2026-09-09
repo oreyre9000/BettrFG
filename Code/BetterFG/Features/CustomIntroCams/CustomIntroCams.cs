@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using BetterFG.UI.Windows.Creative;
 using BetterFG.Utilities;
@@ -192,9 +192,15 @@ namespace BetterFG.Features.CustomIntroCams
             }
         }
 
+        internal static bool HasLabels => _labels.Count > 0;
+
+        private static float _nextCamProbe;
+
         internal static Camera EditorCamera()
         {
             if (_editorCam != null) return _editorCam;
+            if (Time.unscaledTime < _nextCamProbe) return null;
+            _nextCamProbe = Time.unscaledTime + 1f;
             var node = GameObject.Find("LevelEditorCameraNode");
             _editorCam = node != null ? node.GetComponent<Camera>() : Camera.main;
             return _editorCam;

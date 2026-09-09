@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -45,7 +45,8 @@ namespace BetterFG.UI.Tabs
         readonly List<ReplayMeta> _data = new List<ReplayMeta>();
         List<ReplayMeta> _filtered = new List<ReplayMeta>();
         string _query = "";
-        bool _filterFav, _filterCreative, _filterUnity;
+        bool _filterFav, _filterCreative, _filterUnity, _filterMachinima;
+        static readonly Color MACHINIMA_COL = new Color(0.82f, 0.72f, 1f);
         enum SortMode { Date, Name, Duration }
         SortMode _sort = SortMode.Date;
         bool _sortDesc = true;
@@ -53,12 +54,18 @@ namespace BetterFG.UI.Tabs
         protected override float BuildHeader(RectTransform contentRoot, float y, float w)
         {
             float openW = 86f;
+            float machW = 104f;
             float topH = BTN_H * 0.8f;
             UGUIShip.CreateButton(contentRoot, new Rect(PAD, y, openW, topH), "ui.open_file",
                 DARK, Color.white, FS_SM - 1, new Action(OpenFromDisk));
+#if MACHINIMA
+            UGUIShip.CreateButton(contentRoot, new Rect(PAD + openW + PAD * 0.5f, y, machW, topH),
+                "machinima.new", new Color(0.35f, 0.25f, 0.5f, 1f), Color.white, FS_SM - 1, new Action(NewMachinima));
+#endif
+            y += topH + SH * 0.5f;
 
             bool auto = FeatureReplay.AutoRecord;
-            _autoBtn = UGUIShip.CreateButton(contentRoot, new Rect(PAD + openW + PAD, y, w - openW - PAD, topH),
+            _autoBtn = UGUIShip.CreateButton(contentRoot, new Rect(PAD, y, w, topH),
                 AutoLabel(auto), auto ? GREEN : DARK, Color.white, FS_SM, new Action(ToggleAuto));
             y += topH + SH;
 
@@ -83,15 +90,16 @@ namespace BetterFG.UI.Tabs
 
             _filterBtn = UGUIShip.CreateMultiSelectDropdown(contentRoot, new Rect(ddX, y, ddW, HEADER_H),
                 "ui.filters",
-                new List<string> { "ui.favourited", "ui.creative_round", "ui.unity_round_2" },
-                new List<bool> { _filterFav, _filterCreative, _filterUnity },
+                new List<string> { "ui.favourited", "ui.creative_round", "ui.unity_round_2", "machinima.filter" },
+                new List<bool> { _filterFav, _filterCreative, _filterUnity, _filterMachinima },
                 new Action<int, bool>((i, on) =>
                 {
                     if (i == 0) _filterFav = on;
                     else if (i == 1) _filterCreative = on;
-                    else _filterUnity = on;
+                    else if (i == 2) _filterUnity = on;
+                    else _filterMachinima = on;
                     var lbl = _filterBtn.GetComponentInChildren<Text>();
-                    if (lbl != null) lbl.color = (_filterFav || _filterCreative || _filterUnity) ? new Color(1f, 0.85f, 0.2f) : Color.white;
+                    if (lbl != null) lbl.color = (_filterFav || _filterCreative || _filterUnity || _filterMachinima) ? new Color(1f, 0.85f, 0.2f) : Color.white;
                     ApplySearch();
                 }), FS_SM, listW);
             UGUIShip.AddHeaderIcon(_filterBtn, "BetterFG.assets.ui.button.filter.png");
@@ -220,6 +228,7 @@ namespace BetterFG.UI.Tabs
                 if (_filterFav && !m.isFav) return false;
                 if (_filterCreative && !m.isUgc) return false;
                 if (_filterUnity && m.isUgc) return false;
+                if (_filterMachinima && !m.isMachinima) return false;
                 return true;
             });
 
@@ -367,7 +376,7 @@ namespace BetterFG.UI.Tabs
             nameMask.AddComponent<RectMask2D>();
 
             var nTxt = UGUIShip.CreateLabel(nameMask.transform, new Rect(0f, 0f, textW + 400f, 0f),
-                meta.label, FS_SM, meta.isUgc ? UGC_COL : Color.white, TextAnchor.LowerLeft);
+                meta.label, FS_SM, meta.isMachinima ? MACHINIMA_COL : meta.isUgc ? UGC_COL : Color.white, TextAnchor.LowerLeft);
             nTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
             nTxt.verticalOverflow = VerticalWrapMode.Overflow;
             var nRt = nTxt.rectTransform;
@@ -380,6 +389,7 @@ namespace BetterFG.UI.Tabs
                 ? LocalizationService.Get("ui.player_count_singular")
                 : LocalizationService.Format("ui.player_count_plural_fmt", meta.players);
             if (!string.IsNullOrEmpty(meta.shareCode)) sub = meta.shareCode + "  ·  " + sub;
+            if (meta.isMachinima) sub = LocalizationService.Get("machinima.badge") + "  ·  " + sub;
             var cTxt = UGUIShip.CreateLabel(rowGo.transform, new Rect(0f, 0f, textW, FS_SM),
                 sub, FS_SM - 2, DIM, TextAnchor.LowerLeft);
             cTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -441,6 +451,14 @@ namespace BetterFG.UI.Tabs
             }
             _thumbRoutine = null;
         }
+
+#if MACHINIMA
+        static void NewMachinima()
+        {
+            BetterFGUIMan.Instance?.SetVisible(false);
+            MachinimaLevelPrompt.Open();
+        }
+#endif
 
         void OpenFromDisk()
         {

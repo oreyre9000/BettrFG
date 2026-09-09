@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using BetterFG.Services;
 using BetterFG.UI.Windows.Creative;
@@ -317,11 +317,38 @@ namespace BetterFG.Utilities
             UnityEngine.Object.Destroy(lepo.gameObject);
         }
 
+        private static string _levelJson;
+        private static IntPtr _levelJsonOwner = IntPtr.Zero;
+
+        public static void InvalidateLevelJson()
+        {
+            _levelJson = null;
+            _levelJsonOwner = IntPtr.Zero;
+        }
+
+        public static string LevelJson()
+        {
+            try
+            {
+                var loader = SingletonBehaviour<FraggleCommonManager>.Instance?.LevelLoader?.TryCast<LevelLoader>();
+                if (loader == null) { InvalidateLevelJson(); return null; }
+                if (loader.Pointer != _levelJsonOwner)
+                {
+                    _levelJsonOwner = loader.Pointer;
+                    _levelJson = loader.WholeFile;
+                }
+                return _levelJson;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogWarning($"identifier scan: WholeFile threw {ex.Message}");
+                return null;
+            }
+        }
+
         public static IEnumerable<IdentifierMarker> ReadRound(string prefabName)
         {
-            string json = null;
-            try { json = SingletonBehaviour<FraggleCommonManager>.Instance?.LevelLoader?.TryCast<LevelLoader>()?.WholeFile; }
-            catch (Exception ex) { Plugin.Log.LogWarning($"identifier scan: WholeFile threw {ex.Message}"); }
+            string json = LevelJson();
             if (string.IsNullOrEmpty(json)) yield break;
 
             string tag = "\"Name\":\"" + prefabName;
@@ -353,9 +380,7 @@ namespace BetterFG.Utilities
 
         public static string FindNearestColourHex(Vector3 pos, float radius, string excludeNamePrefix)
         {
-            string json = null;
-            try { json = SingletonBehaviour<FraggleCommonManager>.Instance?.LevelLoader?.TryCast<LevelLoader>()?.WholeFile; }
-            catch (Exception ex) { Plugin.Log.LogWarning($"identifier colour scan: WholeFile threw {ex.Message}"); }
+            string json = LevelJson();
             if (string.IsNullOrEmpty(json)) return null;
 
             string bestHex = null;

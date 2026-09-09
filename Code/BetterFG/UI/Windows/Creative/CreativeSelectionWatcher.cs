@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using BetterFG.Core;
 using BetterFG.Features.UnityRound.Editor;
@@ -30,6 +30,7 @@ namespace BetterFG.UI.Windows.Creative
 
         void Update()
         {
+            Utilities.BfgProbe.Flush();
             Services.DiscordPresenceService.FlushPendingPush();
 
             // this component is DontDestroyOnLoad, so without the editor gate every round paid a

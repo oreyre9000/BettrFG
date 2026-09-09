@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using BetterFG.Core;
 using BetterFG.Services;
@@ -346,8 +346,11 @@ namespace BetterFG.Features.CustomIntroCams
                 CustomIntroCams.SetGizmoRenderersEnabled(true);
             }
 
-            var viewer = _playing && _cam != null ? _cam : CustomIntroCams.EditorCamera();
-            if (viewer != null) CustomIntroCams.BillboardLabels(viewer.transform);
+            if (CustomIntroCams.HasLabels)
+            {
+                var viewer = _playing && _cam != null ? _cam : CustomIntroCams.EditorCamera();
+                if (viewer != null) CustomIntroCams.BillboardLabels(viewer.transform);
+            }
 
             if (!_playing) return;
             if (_cam == null) { Stop("camera went away"); return; }

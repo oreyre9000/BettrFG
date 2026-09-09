@@ -29,6 +29,7 @@ namespace BetterFG.Services
         private static bool _realFieldLock;
         private static bool _fakeFieldLock;
         private static bool _editorUiLock;
+        private static bool _screenLock;
         private static bool _controllerLock;
         private static bool _paramTypeLock;
         private static bool _loadingScreenLock;
@@ -55,7 +56,7 @@ namespace BetterFG.Services
             }
         }
 
-        public static bool IsLocked => _realFieldLock || _fakeFieldLock || _editorUiLock || _controllerLock || _paramTypeLock || _loadingScreenLock || OutOfForeground;
+        public static bool IsLocked => _realFieldLock || _fakeFieldLock || _editorUiLock || _screenLock || _controllerLock || _paramTypeLock || _loadingScreenLock || OutOfForeground;
 
         private static bool _musicMuted;
 
@@ -72,6 +73,12 @@ namespace BetterFG.Services
         // locks the whole game input while our UI is up in the level editor — even when not
         // typing in a field — so editor hotkeys / movement don't fire under the open overlay.
         public static void SetEditorUiLock(bool locked) => _editorUiLock = locked;
+
+        // held while one of our fullscreen screens (bean creator, assets, replay) owns the display.
+        // the game underneath is still alive and still listening, so without this its menu navigates
+        // to whatever you press at our UI. own latch, not the editor one, so closing a screen can't
+        // clear a lock the level editor overlay is holding.
+        public static void SetScreenLock(bool locked) => _screenLock = locked;
 
         // locks game input while the player is steering our UI cursor with a controller, so the
         // same stick/buttons don't also drive menus or the camera underneath. ControllerManager
@@ -144,7 +151,7 @@ namespace BetterFG.Services
 
             if (blockBackground && !_devicesDisabledByUs && Input.anyKey) blockBackground = false;
 
-            bool locked = _realFieldLock || _fakeFieldLock || _editorUiLock || _controllerLock
+            bool locked = _realFieldLock || _fakeFieldLock || _editorUiLock || _screenLock || _controllerLock
                           || _paramTypeLock || _loadingScreenLock || outOfForeground;
 
             if (!locked && !blockBackground && !_selfWasLocked

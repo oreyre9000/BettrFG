@@ -40,91 +40,36 @@ namespace BetterFG.Customization.Player
             bool keepLocalDonor = false;
             if (!slot.skinInfo.keepBase)
             {
-                Transform donor = null;
-                for (int i = 0; i < beanGEO.childCount; i++)
-                {
-                    Transform c = beanGEO.GetChild(i);
-                    if (c == null || c.gameObject == null) continue;
-                    if (!(c.name.Contains("Top") || c.name.Contains("Bottom") || c.name.Contains("CH_") || c.name.Contains("Body_LOD") || c.name.Contains("LOD"))) continue;
-                    if (c.name.Contains("Body_LOD0")) { donor = c; break; }
-                }
-                if (donor == null)
-                {
-                    for (int i = 0; i < beanGEO.childCount; i++)
-                    {
-                        Transform c = beanGEO.GetChild(i);
-                        if (c == null || c.gameObject == null) continue;
-                        if (!(c.name.Contains("Top") || c.name.Contains("Bottom") || c.name.Contains("CH_") || c.name.Contains("Body_LOD") || c.name.Contains("LOD"))) continue;
-                        var smr = c.GetComponentInChildren<SkinnedMeshRenderer>(true);
-                        if (smr != null && smr.bones != null && smr.bones.Length > 0) { donor = c; break; }
-                    }
-                }
-                if (donor == null)
-                {
-                    for (int i = 0; i < beanGEO.childCount; i++)
-                    {
-                        Transform c = beanGEO.GetChild(i);
-                        if (c == null || c.gameObject == null) continue;
-                        if (!(c.name.Contains("Top") || c.name.Contains("Bottom") || c.name.Contains("CH_") || c.name.Contains("Body_LOD") || c.name.Contains("LOD"))) continue;
-                        if (c.name.Contains("Body_LOD")) { donor = c; break; }
-                    }
-                }
-
                 for (int i = 0; i < beanGEO.childCount; i++)
                 {
                     Transform child = beanGEO.GetChild(i)?.gameObject?.transform;
-                    if (child == null || !child.gameObject.activeSelf) continue;
+                    if (child == null) continue;
                     if (protectedClones.Contains(child.gameObject)) continue;
 
-                    if (isRemote)
-                    {
-                        if (donor != null && child == donor)
-                        {
-                            var renderers = child.GetComponentsInChildren<Renderer>(true);
-                            if (renderers != null && renderers.Length > 0)
-                            {
-                                var matMap = new Dictionary<Renderer, Material[]>();
-                                Material invis = CostumePollerComponent.GetInvisibleMat();
-                                foreach (var r in renderers)
-                                {
-                                    if (r == null) continue;
-                                    matMap[r] = r.materials;
-                                    var newMats = new Material[r.materials.Length];
-                                    for (int j = 0; j < newMats.Length; j++) newMats[j] = invis;
-                                    r.materials = newMats;
-                                }
-                                hiddenRendererMaterials[pendingKey + "_" + i] = matMap;
-                            }
-                        }
-                        else
-                        {
-                            child.gameObject.SetActive(false);
-                            disabled.Add(child.gameObject);
-                        }
-                    }
-                    else if (keepLocalDonor && donor != null && child == donor)
-                    {
-                        var renderers = child.GetComponentsInChildren<Renderer>(true);
-                        if (renderers != null && renderers.Length > 0)
-                        {
-                            var matMap = new Dictionary<Renderer, Material[]>();
-                            Material invis = CostumePollerComponent.GetInvisibleMat();
-                            foreach (var r in renderers)
-                            {
-                                if (r == null) continue;
-                                matMap[r] = r.materials;
-                                var newMats = new Material[r.materials.Length];
-                                for (int j = 0; j < newMats.Length; j++) newMats[j] = invis;
-                                r.materials = newMats;
-                            }
-                            hiddenRendererMaterials[pendingKey + "_" + i] = matMap;
-                        }
-                    }
-                    else
+                    bool keepLive = isRemote && child.name.Contains("Body_LOD");
+                    if (!keepLive && !child.gameObject.activeSelf) continue;
+
+                    if (!keepLive)
                     {
                         child.gameObject.SetActive(false);
                         disabled.Add(child.gameObject);
+                        continue;
                     }
+
+                    var renderers = child.GetComponentsInChildren<Renderer>(true);
+                    if (renderers == null || renderers.Length == 0) continue;
+
+                    var matMap = new Dictionary<Renderer, Material[]>();
+                    Material invis = CostumePollerComponent.GetInvisibleMat();
+                    foreach (var r in renderers)
+                    {
+                        if (r == null) continue;
+                        matMap[r] = r.materials;
+                        var newMats = new Material[r.materials.Length];
+                        for (int j = 0; j < newMats.Length; j++) newMats[j] = invis;
+                        r.materials = newMats;
+                    }
+                    hiddenRendererMaterials[pendingKey + "_" + i] = matMap;
                 }
 
                 var fgch = bean.GetComponent<FallguyCustomisationHandler>();

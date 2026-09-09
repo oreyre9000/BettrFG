@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -1099,7 +1099,7 @@ namespace BetterFG.Nametag
 
         // NameAndCrownParent for a given display via its crown layout helper (works for both subtypes), which
         // is the same _crownParentTransform the crown code uses — no hardcoded child-path lookup.
-        private static Transform NameAndCrownOf(PlayerInfoDisplay display)
+        internal static Transform NameAndCrownOf(PlayerInfoDisplay display)
         {
             if (display == null) return null;
             var go = display.TryCast<PlayerInfoDisplayGameObject>();

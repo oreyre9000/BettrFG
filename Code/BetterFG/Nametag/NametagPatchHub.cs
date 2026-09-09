@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using BetterFG.Core;
 using BetterFG.Customization.Player;
 using BetterFG.Network;
@@ -243,7 +243,7 @@ namespace BetterFG.Nametag
             [HarmonyPostfix]
             public static void Postfix(PlayerInfoHUDBase __instance)
             {
-                if (CrownRankService.Enabled) CrownRankFovFix.Apply(__instance);
+                CrownRankFovFix.Apply(__instance);
                 NametagIconApplicator.TickIconAlpha(__instance);
                 NametagAllPlayersService.Tick(__instance);
             }

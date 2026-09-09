@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using BetterFG.Utilities;
 using FG.Common;
@@ -75,7 +75,6 @@ namespace BetterFG.Tweaks
         private static void VfxCollisionPostfix(FallGuysCharacterController __instance, UnityEngine.Collision collision, bool landed)
         {
             if (!Active || __instance is null || __instance.m_CachedPtr == IntPtr.Zero) return;
-            if (__instance.IsLocalPlayer) return;
 
             if (landed)
             {
@@ -128,7 +127,7 @@ namespace BetterFG.Tweaks
                 var rb = collision.rigidbody;
                 var otherBean = rb != null ? rb.GetComponent<FallGuysCharacterController>() : null;
                 if (otherBean is null) otherBean = collision.gameObject.GetComponentInParent<FallGuysCharacterController>();
-                if (otherBean is null || otherBean.IsLocalPlayer) return;
+                if (otherBean is null || otherBean.Pointer == c.Pointer) return;
 
                 Yelp(otherBean, rel);
             }

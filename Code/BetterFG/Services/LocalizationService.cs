@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine.UI;
 
@@ -51,6 +51,33 @@ namespace BetterFG.Services
 
         public static string CurrentLanguage => _current;
         public static string[] AvailableLanguages => _languages;
+
+        private static readonly Dictionary<string, string> LangNames = new Dictionary<string, string>
+        {
+            { "en", "English" },
+            { "es", "Español" },
+            { "es-419", "Español (Latinoamérica)" },
+            { "fr", "Français" },
+            { "de", "Deutsch" },
+            { "it", "Italiano" },
+            { "pt", "Português" },
+            { "pt-BR", "Português (Brasil)" },
+            { "nl", "Nederlands" },
+            { "pl", "Polski" },
+            { "tr", "Türkçe" },
+            { "ru", "Русский" },
+            { "uk", "Українська" },
+            { "ja", "日本語" },
+            { "ko", "한국어" },
+            { "zh", "中文" },
+            { "zh-Hans", "简体中文" },
+            { "zh-Hant", "繁體中文" },
+            { "ar", "العربية" },
+            { DEBUG_LANG, "Debug" },
+        };
+
+        public static string DisplayName(string code)
+            => code != null && LangNames.TryGetValue(code, out var n) ? n : code;
 
         public static void Init()
         {

@@ -17,8 +17,13 @@ namespace BetterFG.Customization.Pets
         public string colour = "";
         public float scale = 0.6f;
 
-        // optional full costume skin from the existing catalog - overrides the base look above
+        // optional full costume skin from the existing catalog - overrides the base look above.
+        // legacy: the bean creator writes `skins` now, this is only still read for pets saved before it
         public SkinInfo costume;
+
+        // UGC costume/accessory/item/emote bundles worn by this pet, resolved through the same
+        // profile-skin path every other dressed bean uses
+        public List<BetterFG.Network.RemoteSkinEntry> skins = new List<BetterFG.Network.RemoteSkinEntry>();
 
         // this pet's OWN skin texture overrides - never the local player's global catalog
         public List<SkinTexEntry> skinTexEntries = new List<SkinTexEntry>();
@@ -126,6 +131,27 @@ namespace BetterFG.Customization.Pets
                     };
                 }
 
+                int skinCount = int.TryParse(SettingsService.Get(EK(i, "skin.count"), "0"), out int sc) ? sc : 0;
+                for (int j = 0; j < skinCount; j++)
+                {
+                    string[] parts = SettingsService.Get(EK(i, $"skin.{j}"), "").Split('|');
+                    if (parts.Length < 6 || string.IsNullOrEmpty(parts[0])) continue;
+                    p.skins.Add(new BetterFG.Network.RemoteSkinEntry
+                    {
+                        file = parts[0],
+                        type = parts[1],
+                        source = parts[2],
+                        repoUrl = parts[3],
+                        folder = parts[4],
+                        localPath = parts[5],
+                        hand = parts.Length > 6 && int.TryParse(parts[6], out int hv) ? hv : 0,
+                    });
+                }
+
+                // pets saved before the bean creator kept their one costume in its own keys
+                if (skinCount == 0 && p.costume != null)
+                    p.skins.Add(BetterFG.Customization.Player.BeanLook.FromSkin(p.costume));
+
                 list.Add(p);
             }
             return list;
@@ -161,6 +187,15 @@ namespace BetterFG.Customization.Pets
                 }
                 SettingsService.Set(EK(i, "phrase.min"), p.phraseIntervalMin.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 SettingsService.Set(EK(i, "phrase.max"), p.phraseIntervalMax.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+                SettingsService.Set(EK(i, "skin.count"), p.skins.Count.ToString());
+                for (int j = 0; j < p.skins.Count; j++)
+                {
+                    var e = p.skins[j];
+                    string Clean(string v) => (v ?? "").Replace("|", "");
+                    SettingsService.Set(EK(i, $"skin.{j}"),
+                        $"{Clean(e.file)}|{Clean(e.type)}|{Clean(e.source)}|{Clean(e.repoUrl)}|{Clean(e.folder)}|{Clean(e.localPath)}|{e.hand}");
+                }
 
                 SettingsService.Set(EK(i, "costume.file"), p.costume?.file ?? "");
                 if (p.costume != null)

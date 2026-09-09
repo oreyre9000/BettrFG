@@ -14,6 +14,7 @@ namespace BetterFG.Features.Replay
         public string label;
         public string shareCode;
         public bool isUgc;
+        public bool isMachinima;
         public bool isFav;
         public float duration;
         public int players;
@@ -191,6 +192,7 @@ namespace BetterFG.Features.Replay
                 if (string.IsNullOrEmpty(meta.label)) meta.label = JsonUtil.GetValue(json, "roundName");
                 meta.shareCode = JsonUtil.GetValue(json, "shareCode");
                 meta.isUgc = JsonUtil.GetBool(json, "isUgc");
+                meta.isMachinima = JsonUtil.GetBool(json, "isMachinima");
                 meta.duration = JsonUtil.GetFloat(json, "duration");
                 for (int i = json.IndexOf(PLAYER_ID_KEY); i >= 0; i = json.IndexOf(PLAYER_ID_KEY, i + PLAYER_ID_KEY.Length))
                     meta.players++;
@@ -318,6 +320,53 @@ namespace BetterFG.Features.Replay
                     playerId = br.ReadUInt32(),
                     enabled = br.ReadBoolean(),
                 });
+        }
+
+        static void ReadMachinima(BinaryReader br, ReplayRecording rec)
+        {
+            rec.isMachinima = br.ReadBoolean();
+            if (!rec.isMachinima) return;
+
+#if MACHINIMA
+            foreach (var p in rec.players)
+            {
+                p.inTime = br.ReadSingle();
+
+                int moves = br.ReadInt32();
+                for (int i = 0; i < moves; i++)
+                    p.moves.Add(new MachinimaMove
+                    {
+                        time = br.ReadSingle(),
+                        position = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle()),
+                        yaw = br.ReadSingle(),
+                        faceMotion = br.ReadBoolean(),
+                    });
+
+                int actions = br.ReadInt32();
+                for (int i = 0; i < actions; i++)
+                    p.actions.Add(new MachinimaAction
+                    {
+                        time = br.ReadSingle(),
+                        kind = (MachinimaActionKind)br.ReadInt32(),
+                        duration = br.ReadSingle(),
+                        targetPlayerId = br.ReadUInt32(),
+                        targetObject = br.ReadInt32(),
+                        payload = br.ReadString(),
+                    });
+            }
+
+            MachinimaBaker.BakeAll(rec);
+#else
+            foreach (var p in rec.players)
+            {
+                p.inTime = br.ReadSingle();
+                int moves = br.ReadInt32();
+                for (int i = 0; i < moves; i++) { br.ReadSingle(); br.ReadSingle(); br.ReadSingle(); br.ReadSingle(); br.ReadSingle(); br.ReadBoolean(); }
+                int actions = br.ReadInt32();
+                for (int i = 0; i < actions; i++) { br.ReadSingle(); br.ReadInt32(); br.ReadSingle(); br.ReadUInt32(); br.ReadInt32(); br.ReadString(); }
+            }
+            Plugin.Log.LogInfo($"{rec.name} is a machinima and this build has none of that compiled in, skipped its keys");
+#endif
         }
 
         static void ReadPowerups(BinaryReader br, ReplayRecording rec)
@@ -522,6 +571,7 @@ namespace BetterFG.Features.Replay
                             if (container.version >= 16) ReadGhosts(br, container);
                             if (container.version >= 21) ReadPowerups(br, container);
                             if (container.version >= 22) ReadFrameList(br, container.petFrames, container.version);
+                            if (container.version >= 23) ReadMachinima(br, container);
 
                             FixupMissingOutTimes(container);
                             container.sourcePath = path;
@@ -569,6 +619,7 @@ namespace BetterFG.Features.Replay
                 levelVersion = JsonUtil.GetInt(json, "levelVersion"),
                 backgroundScene = JsonUtil.GetValue(json, "backgroundScene"),
                 isUgc = JsonUtil.GetBool(json, "isUgc"),
+                isMachinima = JsonUtil.GetBool(json, "isMachinima"),
                 isFinal = JsonUtil.GetBool(json, "isFinal"),
                 squadSize = (uint)JsonUtil.GetInt(json, "squadSize"),
                 duration = RoundUpFrame(JsonUtil.GetFloat(json, "duration")),
@@ -731,6 +782,7 @@ namespace BetterFG.Features.Replay
                         source = JsonUtil.GetValue(skin, "source"),
                         localPath = JsonUtil.GetValue(skin, "localPath"),
                         repoUrl = JsonUtil.GetValue(skin, "repoUrl"),
+                        folder = JsonUtil.GetValue(skin, "folder"),
                         hand = JsonUtil.GetInt(skin, "hand"),
                     });
 

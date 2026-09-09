@@ -74,7 +74,8 @@ namespace BetterFG.UI
 
             bool editorUp = Windows.Creative.BatchEditWindow.AnyOpen
                             || Windows.Creative.PublishThumbnailWindow.StepActive
-                            || ReplayViewer.Instance != null;
+                            || ReplayViewer.Instance != null
+                            || Features.Assets.AssetsScreen.Instance != null;
 
             // closing the UI with the pad leaves the OS cursor stranded on screen with no stick to move
             // it. once EVERYTHING is closed (main UI AND wheel), hide+lock the cursor — it comes back when

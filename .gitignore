@@ -26,3 +26,4 @@ Code/BetterFG/build_prompt.state.json
 Code/BetterFG.SkinPackager/creator_deploy.txt
 *.kra
 /Code/BettrFGLocalizationEditor/publish
+*.pyc

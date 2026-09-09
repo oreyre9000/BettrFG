@@ -186,7 +186,7 @@ namespace BetterFG.Network
                     bean = remotes[i];
                 }
 
-                yield return CustomizationHandler.Apply(profile, bean).WrapToIl2Cpp();
+                StartCoroutine(CustomizationHandler.Apply(profile, bean).WrapToIl2Cpp());
             }
         }
 

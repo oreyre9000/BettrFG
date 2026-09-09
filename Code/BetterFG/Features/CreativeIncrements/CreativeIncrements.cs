@@ -73,10 +73,18 @@ namespace BetterFG.Features.CreativeIncrements
         // cheap default grid.
         private static bool _active;
 
-        public static void SetActive(bool on) => _active = on;
+        private static readonly System.Collections.Generic.HashSet<string> _warned
+            = new System.Collections.Generic.HashSet<string>();
+
+        public static void SetActive(bool on)
+        {
+            _active = on;
+            if (!on) _warned.Clear();
+        }
 
         public static void Rewrite(string paramName, float value, ref float min, ref float max, ref float step, ref string numberFormat)
         {
+            BetterFG.Utilities.BfgProbe.Hit("CreateFloatEntry");
             if (!_active) return;
             if (!Enabled) return;
 
@@ -92,6 +100,12 @@ namespace BetterFG.Features.CreativeIncrements
             // never let our max sit below the value being shown, or it can't reach the real index
             float v = value < 0f ? -value : value;
             if (v > m) m = v;
+
+            int points = (int)((m - lo) / s);
+            if (points > 2000 && _warned.Add(paramName ?? "?"))
+                Plugin.Log.LogWarning($"CreativeIncrements: {paramName} builds {points} grid entries "
+                    + $"(min {lo}, max {m}, step {s}) - the game's own default is ~40. "
+                    + "lower creative.increments.max or raise .step if the editor hitches.");
 
             min = lo;
             step = s;

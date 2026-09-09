@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -359,7 +359,7 @@ namespace BetterFG.Features.CreativeGameMode
             if (_value != null)
             {
                 string t = CreativeGameModeRulebook.SelectedTitle;
-                if (!string.IsNullOrEmpty(t)) _value.text = t;
+                if (!string.IsNullOrEmpty(t) && _value.text != t) _value.text = t;
             }
         }
 

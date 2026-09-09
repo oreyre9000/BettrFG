@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using System;
 
@@ -17,13 +16,13 @@ namespace BetterFG.Customization.Player
         private Transform playerRoot;
         private Transform customSkinRoot;
         private readonly List<BonePair> cachedBones = new List<BonePair>();
-        private int lastSyncFrame = -1;
+        private BonePair[] _pairs = Array.Empty<BonePair>();
 
-        // When true, prefer mapping custom bones to player bones using the
-        // SkinnedMeshRenderer.bones array from the custom skin's Body_LOD0.
-        // This is only used for the local player when no explicit offsets exist.
-        private bool useSmrBoneMapping = false;
-        private SkinnedMeshRenderer customBodySmr;
+        private readonly List<LodRig> _rigs = new List<LodRig>();
+        private int _activeRig = -1;
+        private int _stride = 1;
+        private int _phase;
+        private int _tick;
 
         private Dictionary<string, Transform> _playerBonesByName = new Dictionary<string, Transform>(StringComparer.Ordinal);
         private Transform _playerTorsoBone;
@@ -31,13 +30,16 @@ namespace BetterFG.Customization.Player
 
         void Start()
         {
+            _phase = GetInstanceID() & 3;
             RebuildOffsetMap();
             SetupBoneReferences();
         }
 
         public void Rebind()
         {
-            _playerBonesByName.Clear();
+            _rigs.Clear();
+            _activeRig = -1;
+            _playerBonesByName = new Dictionary<string, Transform>(StringComparer.Ordinal);
             SetupBoneReferences();
         }
 
@@ -45,36 +47,27 @@ namespace BetterFG.Customization.Player
         {
             boneOffsets = offsets ?? new List<BoneOffsetEntry>();
             RebuildOffsetMap();
-            useSmrBoneMapping = false;
-            customBodySmr = null;
-
             RebuildCachedBones();
             Plugin.Log.LogInfo($"BoneSync: {boneOffsetMap.Count} offsets registered on '{name}'");
         }
 
         public void SyncNow()
         {
-            int frame = Time.frameCount;
-            if (lastSyncFrame == frame) return;
-            lastSyncFrame = frame;
-
-            if (cachedBones.Count == 0) return;
-            for (int i = 0; i < cachedBones.Count; i++)
+            for (int i = 0; i < _pairs.Length; i++)
             {
-                var pair = cachedBones[i];
-                // per bone, every frame — the Unity == operator is a real il2cpp invoke, m_CachedPtr isn't
-                if (pair.customBone is null || pair.customBone.m_CachedPtr == IntPtr.Zero) continue;
-                if (pair.playerBone is null || pair.playerBone.m_CachedPtr == IntPtr.Zero) continue;
+                var custom = _pairs[i].customBone;
+                var driver = _pairs[i].playerBone;
+                if (custom is null || custom.m_CachedPtr == IntPtr.Zero) continue;
+                if (driver is null || driver.m_CachedPtr == IntPtr.Zero) continue;
 
-                pair.playerBone.GetPositionAndRotation(out var pos, out var rot);
-                if (pair.hasOffset)
+                driver.GetPositionAndRotation(out var pos, out var rot);
+                if (_pairs[i].hasOffset)
                 {
-                    pair.customBone.rotation = rot;
-                    pair.customBone.localPosition = pair.offset;
+                    custom.rotation = rot;
+                    custom.localPosition = _pairs[i].offset;
                 }
                 else
-                    // world space direct copy -- local space math breaks when custom skin is scaled (e.g. 100x from blender)
-                    pair.customBone.SetPositionAndRotation(pos, rot);
+                    custom.SetPositionAndRotation(pos, rot);
             }
 
             ForceScaledTorsoLocalPos();
@@ -99,56 +92,110 @@ namespace BetterFG.Customization.Player
 
         void LateUpdate()
         {
-            if (playerObject is null || playerObject.m_CachedPtr == IntPtr.Zero || !playerObject.activeInHierarchy) return;
+            if (playerObject is null || playerObject.m_CachedPtr == IntPtr.Zero)
+            {
+                if (!isRemote) Destroy(gameObject);
+                return;
+            }
+
+            if ((++_tick + _phase) % _stride != 0) return;
+
+            if (!playerObject.activeInHierarchy)
+            {
+                if (!isRemote) Destroy(gameObject);
+                return;
+            }
+
+            SwitchToLiveRig();
             SyncNow();
         }
 
-        void Update()
+        private void SwitchToLiveRig()
         {
-            if (isRemote) return;
-            if (playerObject is null || playerObject.m_CachedPtr == IntPtr.Zero || !playerObject.activeInHierarchy)
-                Destroy(gameObject);
+            if (_rigs.Count < 2) return;
+
+            if (_activeRig >= 0)
+            {
+                var cur = _rigs[_activeRig];
+                if (!(cur.rootGo is null) && cur.rootGo.m_CachedPtr != IntPtr.Zero && cur.rootGo.activeInHierarchy) return;
+            }
+
+            for (int i = 0; i < _rigs.Count; i++)
+            {
+                var rig = _rigs[i];
+                if (rig.rootGo is null || rig.rootGo.m_CachedPtr == IntPtr.Zero || !rig.rootGo.activeInHierarchy) continue;
+                if (i == _activeRig) return;
+
+                UseRig(i);
+                Plugin.Log.LogInfo($"bone sync hopped to {rig.label} on {playerObject.name}, {cachedBones.Count} bones matched");
+                return;
+            }
+        }
+
+        private void UseRig(int index)
+        {
+            _activeRig = index;
+            var rig = _rigs[index];
+            _playerBonesByName = rig.bones;
+            playerRoot = rig.root;
+            _playerTorsoBone = rig.torso;
+            _stride = rig.stride;
+            RebuildCachedBones();
         }
 
         private void SetupBoneReferences()
         {
+            var seenRoots = new HashSet<int>();
             foreach (var skinned in playerObject.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
-                if (skinned.bones == null || skinned.bones.Length == 0) continue;
-                playerRoot = skinned.bones.FirstOrDefault(b => b != null && b.name == "Root");
+                var bones = skinned.bones;
+                if (bones == null || bones.Length == 0) continue;
 
-                foreach (var b in skinned.bones)
+                Transform root = null;
+                foreach (var b in bones)
                 {
                     if (b == null) continue;
-                    if (!_playerBonesByName.ContainsKey(b.name))
-                        _playerBonesByName[b.name] = b;
-                    string lower = b.name.ToLowerInvariant();
-                    if (!_playerBonesByName.ContainsKey(lower))
-                        _playerBonesByName[lower] = b;
+                    if (b.name == "Root") { root = b; break; }
                 }
+                if (root == null) root = skinned.rootBone;
+                if (root == null) continue;
+                if (!seenRoots.Add(root.GetInstanceID())) continue;
 
-                if (playerRoot != null) break;
-            }
-
-            if (playerRoot == null)
-            {
-                string[] paths = {
-                    "Character/SKELETON/Root", "Character/Armature/Root",
-                    "SKELETON/Root", "Armature/Root", "Character/GEO/Body_LOD0/Root"
-                };
-                foreach (string path in paths)
+                var map = new Dictionary<string, Transform>(StringComparer.Ordinal);
+                foreach (var b in bones)
                 {
-                    playerRoot = playerObject.transform.Find(path);
-
-                    if (playerRoot != null) break;
+                    if (b == null) continue;
+                    if (!map.ContainsKey(b.name)) map[b.name] = b;
+                    string lower = b.name.ToLowerInvariant();
+                    if (!map.ContainsKey(lower)) map[lower] = b;
                 }
+
+                foreach (string alias in new[] { root.name, "Body_LOD0 (merge)", "Body_LOD0", "Main FG/Body_LOD0 (merge)" })
+                {
+                    if (!map.ContainsKey(alias)) map[alias] = root;
+                    string lowerAlias = alias.ToLowerInvariant();
+                    if (!map.ContainsKey(lowerAlias)) map[lowerAlias] = root;
+                }
+
+                if (!map.TryGetValue("Torso_C_jnt_NoStrechSquash", out var torso))
+                    torso = FindBoneDeep(root, "Torso_C_jnt_NoStrechSquash");
+
+                string label = skinned.name;
+                int lod = 0;
+                int at = label.IndexOf("LOD", StringComparison.Ordinal);
+                if (at >= 0 && at + 3 < label.Length && char.IsDigit(label[at + 3]))
+                    lod = label[at + 3] - '0';
+
+                _rigs.Add(new LodRig
+                {
+                    label = label,
+                    root = root,
+                    rootGo = root.gameObject,
+                    torso = torso,
+                    bones = map,
+                    stride = lod < 2 ? 1 : (lod > 4 ? 4 : lod)
+                });
             }
-
-            if (playerRoot == null)
-                playerRoot = playerObject.GetComponentsInChildren<Transform>(true)
-                                         .FirstOrDefault(t => t.name == "Root");
-
-            _playerTorsoBone = FindBoneDeep(playerObject.transform, "Torso_C_jnt_NoStrechSquash");
 
             customSkinRoot = transform.Find("Main FG/Body_LOD0 (merge)");
             if (customSkinRoot == null)
@@ -163,79 +210,25 @@ namespace BetterFG.Customization.Player
 
             _customTorsoBone = FindBoneDeep(transform, "Torso_C_jnt_NoStrechSquash");
 
-            // ensure the top-level custom skin root name maps to the player's Root transform
-            if (playerRoot != null)
+            if (_rigs.Count > 0)
             {
-                void AddMap(string name)
-                {
-                    if (string.IsNullOrEmpty(name)) return;
-                    if (!_playerBonesByName.ContainsKey(name)) _playerBonesByName[name] = playerRoot;
-                    string lower = name.ToLowerInvariant();
-                    if (!_playerBonesByName.ContainsKey(lower)) _playerBonesByName[lower] = playerRoot;
-                }
-
-                AddMap(playerRoot.name);
-                AddMap("Body_LOD0 (merge)");
-                AddMap("Body_LOD0");
-                AddMap("Main FG/Body_LOD0 (merge)");
-                Plugin.Log.LogInfo($"BoneSync: added remote root mappings for {playerObject.name} -> {playerRoot.name} (playerBones={_playerBonesByName.Count})");
+                int live = 0;
+                for (int i = 0; i < _rigs.Count; i++)
+                    if (_rigs[i].rootGo.activeInHierarchy) { live = i; break; }
+                UseRig(live);
             }
-
-            useSmrBoneMapping = false;
-            customBodySmr = null;
-
-            RebuildCachedBones();
 
             if (playerRoot == null || customSkinRoot == null)
                 Plugin.Log.LogWarning($"BoneSync: setup failed on {playerObject.name} - playerRoot={(playerRoot != null ? playerRoot.name : "null")} customRoot={(customSkinRoot != null ? customSkinRoot.name : "null")}");
             else
-                Plugin.Log.LogInfo($"BoneSync: ready on {playerObject.name} - playerRoot={playerRoot.name} customRoot={customSkinRoot.name} playerBones={_playerBonesByName.Count} cached={cachedBones.Count}");
+                Plugin.Log.LogInfo($"BoneSync: ready on {playerObject.name} - {_rigs.Count} skeletons found, riding '{_rigs[_activeRig].label}' with {_playerBonesByName.Count} bones, cached={cachedBones.Count}");
         }
 
         private void RebuildCachedBones()
         {
             cachedBones.Clear();
-            if (customSkinRoot == null) return;
-
-            if (useSmrBoneMapping && customBodySmr != null)
-            {
-                BuildCachedBonesFromSmr(customBodySmr);
-                return;
-            }
-
-            CollectCachedBones(customSkinRoot);
-        }
-
-        private void BuildCachedBonesFromSmr(SkinnedMeshRenderer smr)
-        {
-            if (smr == null || smr.bones == null) return;
-            int added = 0;
-            for (int i = 0; i < smr.bones.Length; i++)
-            {
-                var customBone = smr.bones[i];
-                if (customBone == null) continue;
-
-                Transform playerBone = null;
-                if (!_playerBonesByName.TryGetValue(customBone.name, out playerBone) || playerBone == null)
-                    _playerBonesByName.TryGetValue(customBone.name.ToLowerInvariant(), out playerBone);
-
-                if (playerBone != null)
-                {
-                    cachedBones.Add(new BonePair
-                    {
-                        customBone = customBone,
-                        playerBone = playerBone,
-                        hasOffset = false,
-                        offset = Vector3.zero
-                    });
-                    added++;
-                }
-            }
-
-            if (added > 0)
-                Plugin.Log.LogInfo($"BoneSync: SMR-based mapping created with {added} bones for '{name}'");
-            else
-                Plugin.Log.LogWarning($"BoneSync: SMR-based mapping found 0 matches for '{name}'");
+            if (customSkinRoot != null) CollectCachedBones(customSkinRoot);
+            _pairs = cachedBones.ToArray();
         }
 
         private void CollectCachedBones(Transform customBone)
@@ -272,8 +265,10 @@ namespace BetterFG.Customization.Player
 
         private void ForceScaledTorsoLocalPos()
         {
-            if (_playerTorsoBone == null || _customTorsoBone == null) return;
-            _customTorsoBone.localPosition = _playerTorsoBone.localPosition * 0.01f;
+            if (_playerTorsoBone is null || _playerTorsoBone.m_CachedPtr == IntPtr.Zero) return;
+            if (_customTorsoBone is null || _customTorsoBone.m_CachedPtr == IntPtr.Zero) return;
+            _playerTorsoBone.GetLocalPositionAndRotation(out var lp, out _);
+            _customTorsoBone.localPosition = lp * 0.01f;
         }
 
         private static Transform FindBoneDeep(Transform root, string boneName)
@@ -288,7 +283,17 @@ namespace BetterFG.Customization.Player
             return null;
         }
 
-        private class BonePair
+        private class LodRig
+        {
+            public string label;
+            public Transform root;
+            public GameObject rootGo;
+            public Transform torso;
+            public Dictionary<string, Transform> bones;
+            public int stride;
+        }
+
+        private struct BonePair
         {
             public Transform customBone;
             public Transform playerBone;

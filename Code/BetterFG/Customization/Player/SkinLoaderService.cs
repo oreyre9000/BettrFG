@@ -263,9 +263,11 @@ namespace BetterFG.Customization.Player
             float waited = 0f;
             while (bundle == null && waited < 20f)
             {
-                if (skinApp != null && skinApp.TryGetLoadedBundle(entry.file, out var cached) && cached != null)
-                { bundle = cached; break; }
-                if (!_downloading.Contains(entry.file)) break;
+                if (!_downloading.Contains(entry.file))
+                {
+                    if (skinApp != null && skinApp.TryGetLoadedBundle(entry.file, out var cached) && cached != null) bundle = cached;
+                    break;
+                }
                 yield return null;
                 waited += Time.deltaTime;
             }
@@ -288,6 +290,7 @@ namespace BetterFG.Customization.Player
                 info.infoFetched = true;
             }
 
+            info = info.Copy();
             info.type = entry.type;
             info.sourceRepo = repoRaw;
             info.repoFolder = folder;

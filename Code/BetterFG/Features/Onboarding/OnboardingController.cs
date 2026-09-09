@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -20,16 +20,18 @@ namespace BetterFG.Features.Onboarding
     //
     // runs once ever, finishing or skipping writes seen.onboarding. deliberately NOT tied to
     // startup.seen, so players who updated from an older build still get it the once.
-    public class OnboardingController : MonoBehaviour
+    public class OnboardingController : PromptHost
     {
         public OnboardingController(IntPtr ptr) : base(ptr) { }
 
-        private const string KEY_SEEN = "seen.onboarding";
+        public const string KEY_SEEN = "seen.onboarding";
 
         public static OnboardingController Instance { get; private set; }
 
         // first-open help prompts stay out of the way while the tour is driving
         public static bool IsRunning => Instance != null && Instance._running;
+
+        public static bool StartupDone;
 
         // BettrFG's canvases live at 996-1001, and the game draws somewhere in that band, a backdrop
         // that sits under our UI ends up under the game too. So while the tutorial runs we lift every
@@ -46,11 +48,7 @@ namespace BetterFG.Features.Onboarding
         // how long the loading cover needs to sweep in and fully own the screen
         private const float CoverSettle = 0.5f;
 
-        private Canvas _canvas;
-        private Canvas _blockerCanvas;
         private Canvas _backdropCanvas;
-        private OnboardingBlocker _blocker;
-        private GameObject _popup;
         private GameObject _pulse;
 
         private bool _running;
@@ -81,7 +79,12 @@ namespace BetterFG.Features.Onboarding
                    || BetterFGUIMan.Instance.GetSlotTab(0)?.TitleRt == null)
                 yield return null;
             for (int i = 0; i < 3; i++) yield return null;
+            while (!StartupDone) yield return null;
             Begin();
+            // the canvases were created this frame, so their CanvasScaler hasn't sized them yet and
+            // rect still reads raw screen pixels; anything placed off it lands too far out
+            yield return null;
+            Step(0);
         }
 
         private void Begin()
@@ -116,8 +119,6 @@ namespace BetterFG.Features.Onboarding
 
             _canvas = UGUIShip.CreateCanvas("BetterFG_OnboardingCanvas");
             _canvas.sortingOrder = PopupOrder;
-
-            Step(0);
         }
 
         // one-shot inventory of who is drawing where, so the next ordering problem is answered by the
@@ -193,6 +194,7 @@ namespace BetterFG.Features.Onboarding
             var uim = BetterFGUIMan.Instance;
             switch (_step)
             {
+                case StepToggleUiId: return uim?.IsVisible == true;
                 // the slot holds a different Tab instance after a swap, so always re-read it
                 case StepOpenTab: return uim?.GetSlotTab(_goalSlot)?.IsOpen == true;
                 case StepRightClick: return uim?.SlotDropdownOpen == true;
@@ -212,6 +214,7 @@ namespace BetterFG.Features.Onboarding
             _step = -1;
             // written here so it covers both finishing and skipping, but not a crash mid-tour
             SettingsService.Set(KEY_SEEN, "true");
+            Tweaks.StartupTitleScreenTweak.ForceOn = false;
             StartCoroutine(FinishRoutine().WrapToIl2Cpp());
         }
 
@@ -266,34 +269,6 @@ namespace BetterFG.Features.Onboarding
             _popup = null;
         }
 
-        private static IEnumerator CloseThenDestroy(GameObject go)
-        {
-            var rt = go.GetComponent<RectTransform>();
-            float e = 0f;
-            while (e < OnboardingPopup.AnimDur)
-            {
-                e += Time.unscaledDeltaTime;
-                float t = 1f - Mathf.Clamp01(e / OnboardingPopup.AnimDur);
-                rt.localScale = new Vector3(t, 1f, 1f);
-                yield return null;
-            }
-            UnityEngine.Object.Destroy(go);
-        }
-
-        private IEnumerator OpenPopup(GameObject go)
-        {
-            var rt = go.GetComponent<RectTransform>();
-            float e = 0f;
-            while (e < OnboardingPopup.AnimDur)
-            {
-                e += Time.unscaledDeltaTime;
-                rt.localScale = new Vector3(
-                    OnboardingPopup.OpenCurve.Evaluate(Mathf.Clamp01(e / OnboardingPopup.AnimDur)), 1f, 1f);
-                yield return null;
-            }
-            rt.localScale = Vector3.one;
-        }
-
         private void ShowPopup(GameObject go)
         {
             _popup = go;
@@ -324,15 +299,17 @@ namespace BetterFG.Features.Onboarding
 
         // ── Steps ─────────────────────────────────────────────────────────────
         private const int StepWelcomeId = 0;
-        private const int StepOpenTab = 1;
-        private const int StepRightClick = 2;
-        private const int StepPickTab = 3;
-        private const int StepCloseTab = 4;
-        private const int StepWheelId = 5;
-        private const int StepTweaksId = 6;
-        private const int StepTweaksInfoId = 7;
-        private const int StepTweaksCloseId = 8;
-        private const int StepDoneId = 9;
+        private const int StepTabsIntroId = 1;
+        private const int StepToggleUiId = 2;
+        private const int StepOpenTab = 3;
+        private const int StepRightClick = 4;
+        private const int StepPickTab = 5;
+        private const int StepCloseTab = 6;
+        private const int StepWheelId = 7;
+        private const int StepTweaksId = 8;
+        private const int StepTweaksInfoId = 9;
+        private const int StepTweaksCloseId = 10;
+        private const int StepDoneId = 11;
         // parked between steps so a met goal can't fire twice while the handover runs
         private const int StepHandover = -2;
 
@@ -344,6 +321,8 @@ namespace BetterFG.Features.Onboarding
             switch (idx)
             {
                 case StepWelcomeId: StepWelcome(); break;
+                case StepTabsIntroId: StepTabsIntro(); break;
+                case StepToggleUiId: StepToggleUi(); break;
                 case StepOpenTab: StepTabs(); break;
                 case StepRightClick: StepSwitchTab(); break;
                 case StepPickTab: StepPickFromDropdown(); break;
@@ -400,8 +379,44 @@ namespace BetterFG.Features.Onboarding
                 new[]
                 {
                     SkipButton(),
-                    new OnboardingPopup.ButtonSpec("onboarding.btn.lets_go", () => Step(1), OnboardingPopup.BtnPrimary),
+                    new OnboardingPopup.ButtonSpec("onboarding.btn.lets_go", () => Step(StepTabsIntroId), OnboardingPopup.BtnPrimary),
                 }));
+        }
+
+        private void StepTabsIntro()
+        {
+            var uim = BetterFGUIMan.Instance;
+            SideWheelManager.InputLocked = true;
+            SideWheelManager.ScrollLocked = true;
+
+            _goalSlot = 0;
+            uim.SetVisibleForced(false);
+            ShowOnlySlot(_goalSlot);
+            HoleNone();
+
+            ShowPopup(OnboardingPopup.Show(_canvas,
+                "onboarding.tabsintro.title", "onboarding.tabsintro.body",
+                Vector2.zero, new Vector2(0.5f, 0.5f),
+                new[] { SkipButton(), NextButton(StepToggleUiId) }));
+        }
+
+        private void StepToggleUi()
+        {
+            var uim = BetterFGUIMan.Instance;
+            SideWheelManager.InputLocked = true;
+            SideWheelManager.ScrollLocked = true;
+
+            _goalSlot = 0;
+            uim.SetVisibleForced(false);
+            ShowOnlySlot(_goalSlot);
+            uim.VisibilityLocked = false;
+            HoleNone();
+
+            ShowPopup(OnboardingPopup.Show(_canvas,
+                "onboarding.toggleui.title",
+                LocalizationService.Format("onboarding.toggleui.body", KeybindService.Label(KeybindId.ToggleUI)),
+                Vector2.zero, new Vector2(0.5f, 0.5f),
+                new[] { SkipButton() }));
         }
 
         private void StepTabs()
@@ -411,6 +426,7 @@ namespace BetterFG.Features.Onboarding
             SideWheelManager.ScrollLocked = true;
 
             _goalSlot = 0;
+            uim.VisibilityLocked = true;
             uim.SetVisibleForced(true);
             ShowOnlySlot(_goalSlot);
 

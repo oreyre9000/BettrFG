@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BetterFG.Services;
 using BetterFG.UI.Windows.Creative;
 using HarmonyLib;
@@ -14,7 +14,36 @@ namespace BetterFG.Features.NeonMaterial
         [HarmonyPostfix]
         public static void Postfix([HarmonyArgument(0)] LevelEditorPlaceableObject placeableObject)
         {
-            if (NeonMaterial.IsMarkerObject(placeableObject)) NeonMaterial.Sync();
+            // same reason as CustomLightRegisterObjectPatch: a level load calls this per placeable
+            // and Sync() reads the whole level json, so ride the one shared delayed ladder.
+            if (NeonMaterial.IsMarkerObject(placeableObject)) CustomLights.CustomLights.SyncDelayed();
+            else NeonMaterial.OnPlaced(placeableObject);
+        }
+    }
+
+    [HarmonyPatch(typeof(LevelEditorPlaceableObject), nameof(LevelEditorPlaceableObject.CopyPreviousData))]
+    internal static class NeonMaterialClonePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(LevelEditorPlaceableObject __instance, [HarmonyArgument(0)] LevelEditorPlaceableObject previousObject)
+            => NeonMaterial.OnCloned(__instance, previousObject);
+    }
+
+    [HarmonyPatch(typeof(LevelEditorPlaceableObject), nameof(LevelEditorPlaceableObject.PlaceObject))]
+    internal static class NeonMaterialPlacePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(LevelEditorPlaceableObject __instance) => NeonMaterial.OnPlaced(__instance);
+    }
+
+    [HarmonyPatch(typeof(LevelEditorDrawableData), nameof(LevelEditorDrawableData.ApplyScaleToObject))]
+    internal static class NeonMaterialDrawableScalePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(LevelEditorDrawableData __instance)
+        {
+            BetterFG.Utilities.BfgProbe.Hit("ApplyScaleToObject");
+            NeonMaterial.OnDrawableRescaled(__instance);
         }
     }
 
@@ -37,13 +66,12 @@ namespace BetterFG.Features.NeonMaterial
 
         private static ParameterChangedIndex _cb;
         private static ParameterChangedIndex _origCb;
-        private static LevelEditorPlaceableObject _target;
         private static int _neonSlot = -1;
 
         [HarmonyPostfix]
         public static void Postfix(LevelEditorParameterMenuViewModel __instance)
         {
-            _target = null;
+            NeonMaterial.LastParamTarget = null;
             _neonSlot = -1;
 
             var target = __instance._menuData != null ? __instance._menuData.ParamTarget : null;
@@ -86,14 +114,14 @@ namespace BetterFG.Features.NeonMaterial
             matRow._nodeData = nd;
             matRow.UpdateVm();
 
-            _target = target;
+            NeonMaterial.LastParamTarget = target;
 
             if (neon) NeonMaterial.ApplyNeon(target.transform, NeonMaterial.ColourOf(target));
         }
 
         private static void OnMaterialIndex(int index)
         {
-            var t = _target;
+            var t = NeonMaterial.LastParamTarget;
             if (t == null) return;
 
             var oc = _origCb;

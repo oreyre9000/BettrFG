@@ -34,11 +34,23 @@ namespace BetterFG.Services
                 _localPlayerBean = value;
                 if (_localPlayerBean != null)
                 {
-                    SkinApplicationService.Instance?.PollAndReapplyCustomTextureForBean(_localPlayerBean);
+                    SkinApplicationService.Instance?.TryAutoReapplyCustomTextureForBean(_localPlayerBean);
                     PlayerScaleService.RestorePlayerScaleToBean(_localPlayerBean);
                 }
             }
         }
+
+        private static readonly HashSet<int> _foreignBeans = new HashSet<int>();
+
+        public static void MarkForeignBean(GameObject bean)
+        {
+            if (bean != null) _foreignBeans.Add(bean.GetInstanceID());
+        }
+
+        public static bool IsForeignBean(GameObject bean)
+            => bean != null && _foreignBeans.Contains(bean.GetInstanceID());
+
+        public static void ForgetForeignBeans() => _foreignBeans.Clear();
 
         private SkinApplicationService skinApplicationService;
         private Dictionary<int, GameObject> loggedBeans = new Dictionary<int, GameObject>();

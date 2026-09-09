@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -541,7 +541,7 @@ namespace BetterFG.Patches.GameStates
             var svc = SkinApplicationService.Instance;
             if (svc == null || __instance == null) return;
             if (svc.IsBindingGameCosmetic(__instance.gameObject)) return;
-            svc.PollAndReapplyCustomTextureForBean(__instance.gameObject);
+            svc.ApplyEnabledEntriesToRenderer(__instance.gameObject, mesh);
         }
     }
 
@@ -590,16 +590,33 @@ namespace BetterFG.Patches.GameStates
         [HarmonyPostfix]
         public static void Postfix()
         {
+            BetterFG.Nametag.NametagIconApplicator.ForgetRecentKeys();
+            BeanMonitorService.ForgetForeignBeans();
             BetterFGUnityRounds.MarkSceneReadyAndInstantiateQueuedRound();
-            BetterFG.Features.CustomBackgrounds.Definers.Recheck();
             BetterFG.Features.CustomLights.CustomLights.InvalidateRoundLights();
-            BetterFG.Features.CustomLights.CustomLights.Sync();
-            BetterFG.Features.CustomLights.CustomLights.SyncDelayed();
-            BetterFG.Features.CustomIntroCams.CustomIntroCams.Sync();
-            BetterFG.Customization.UI.CreativeGizmoScale.Apply();
             BetterFG.Features.NeonMaterial.NeonMaterial.ResetEditorState();
-            BetterFG.Features.NeonMaterial.NeonMaterial.Sync();
-            BetterFG.Features.NeonMaterial.NeonMaterial.SyncDelayed();
+            BetterFG.Utilities.IdentifierObjects.InvalidateLevelJson();
+            BetterFG.Features.CustomBackgrounds.DisableBackgroundRulebook.Invalidate();
+
+            var host = BeanMonitorService.Instance;
+            if (host != null) host.StartCoroutine(AfterLoad().WrapToIl2Cpp());
+            else AfterLoadNow();
+        }
+
+        // Every call below walks the whole scene or the level json. Run inline it stalls the frame
+        // the client is meant to report "finished loading" on, and the server drops us mid-load.
+        private static IEnumerator AfterLoad()
+        {
+            yield return null;
+            AfterLoadNow();
+        }
+
+        private static void AfterLoadNow()
+        {
+            BetterFG.Features.CustomBackgrounds.Definers.Recheck();
+            BetterFG.Features.CustomLights.CustomLights.SyncDelayed();
+            BetterFG.Customization.UI.CreativeGizmoScale.Apply();
+            BetterFG.Tweaks.RetroGoopMaterialsTweak.OnRoundLoaded();
 
             // CEP leaves checkpoint/spawn zone flags visible so it can dynamically place them in the
             // editor - fine there, but they leak into actual UGC rounds too. Only hide in-round.
@@ -1405,7 +1422,12 @@ namespace BetterFG.Patches.GameStates
         [HarmonyPostfix]
         public static void Postfix(FallguyCustomisationHandler __instance)
         {
-            BetterFG.Customization.Player.CostumePollerComponent.RehideForBean(__instance.gameObject.GetInstanceID());
+            var bean = __instance.gameObject;
+            BetterFG.Customization.Player.CostumePollerComponent.RehideForBean(bean.GetInstanceID());
+
+            var svc = SkinApplicationService.Instance;
+            if (svc == null || svc.IsBindingGameCosmetic(bean)) return;
+            svc.TryAutoReapplyCustomTextureForBean(bean);
         }
     }
 
@@ -1468,35 +1490,32 @@ namespace BetterFG.Patches.GameStates
                 yield break;
             }
 
-            WinnerInfo localWinner = null;
+            var winners = new List<(WinnerInfo info, string name, string key, bool local)>();
             try
             {
                 string localkey = GlobalGameStateClient.Instance?.GetLocalPlayerKey();
+                string localName = string.IsNullOrEmpty(localkey) ? null : PlayerUtils.CleanPlayerName(localkey);
                 Plugin.Log.LogInfo($"VictoryScreen: localkey={localkey}, winnerCount={infos.Count}");
-                if (string.IsNullOrEmpty(localkey)) yield break;
-
-                string localName = PlayerUtils.CleanPlayerName(localkey);
 
                 for (int i = 0; i < infos.Count; i++)
                 {
                     var info = infos[i];
                     string winnerKey = info?.PlayerMetadata?.PlayerKey;
-                    Plugin.Log.LogInfo($"VictoryScreen: winner[{i}] key={winnerKey}");
                     if (string.IsNullOrEmpty(winnerKey)) continue;
 
-                    if (PlayerUtils.CleanPlayerName(winnerKey).Equals(localName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        localWinner = info;
-                        Plugin.Log.LogInfo($"VictoryScreen: matched local winner at index {i}");
-                        break;
-                    }
+                    string name = PlayerUtils.CleanPlayerName(winnerKey);
+                    bool mine = localName != null && name.Equals(localName, StringComparison.OrdinalIgnoreCase);
+                    if (mine && !string.IsNullOrEmpty(LocalPlayerInfo.FGlocalplayerusername))
+                        name = LocalPlayerInfo.FGlocalplayerusername;
+                    Plugin.Log.LogInfo($"VictoryScreen: winner[{i}] key={winnerKey}{(mine ? " (that's us)" : "")}");
+                    winners.Add((info, name, winnerKey, mine));
                 }
             }
             catch (Exception ex) { Plugin.Log.LogError($"VictoryScreen: resolve: {ex}"); yield break; }
 
-            if (localWinner == null)
+            if (winners.Count == 0)
             {
-                Plugin.Log.LogInfo("VictoryScreen: local player is not the winner, nothing to do");
+                Plugin.Log.LogWarning("VictoryScreen: none of the winners carried a player key, nothing to hang a profile off");
                 yield break;
             }
 
@@ -1504,11 +1523,11 @@ namespace BetterFG.Patches.GameStates
 
             try
             {
-                var vm = localWinner.NamePlateRef;
-                Plugin.Log.LogInfo($"VictoryScreen: NamePlateRef={(vm != null)}");
-                if (vm != null)
+                foreach (var w in winners)
                 {
-                    NametagPatchHub.HandleViewModel(vm, LocalPlayerInfo.FGlocalplayerusername);
+                    var vm = w.info.NamePlateRef;
+                    if (vm == null) { Plugin.Log.LogInfo($"VictoryScreen: {w.name} has no nameplate ref"); continue; }
+                    NametagPatchHub.HandleViewModel(vm, w.name);
                     BeanMonitorService.Instance.StartCoroutine(NudgeVictoryIcon(vm).WrapToIl2Cpp());
                 }
             }
@@ -1516,10 +1535,13 @@ namespace BetterFG.Patches.GameStates
 
             BeanMonitorService.Instance.StartCoroutine(BeanMonitorService.PollAndPushVictoryPlinth().WrapToIl2Cpp());
 
-            var spawn = localWinner._spawnTransform;
-            Plugin.Log.LogInfo($"VictoryScreen: spawnTransform={(spawn != null ? spawn.name : "null")}");
-            if (spawn != null)
-                BeanMonitorService.Instance.StartCoroutine(PollForBean(spawn).WrapToIl2Cpp());
+            foreach (var w in winners)
+            {
+                var spawn = w.info._spawnTransform;
+                Plugin.Log.LogInfo($"VictoryScreen: {w.name} spawn={(spawn != null ? spawn.name : "null")}");
+                if (spawn != null)
+                    BeanMonitorService.Instance.StartCoroutine(PollForBean(spawn, w.key, w.local).WrapToIl2Cpp());
+            }
         }
 
         private const float VICTORY_ICON_NUDGE_X = 25f;
@@ -1551,7 +1573,7 @@ namespace BetterFG.Patches.GameStates
             return null;
         }
 
-        private static IEnumerator PollForBean(Transform spawnTransform)
+        private static IEnumerator PollForBean(Transform spawnTransform, string winnerKey, bool isLocalWinner)
         {
             float elapsed = 0f;
             while (elapsed < 10f)
@@ -1561,7 +1583,18 @@ namespace BetterFG.Patches.GameStates
                     var bean = spawnTransform.Find("FallGuy(Clone)");
                     if (bean != null)
                     {
-                        BeanMonitorService.PushBean(bean.gameObject);
+                        if (isLocalWinner)
+                        {
+                            BeanMonitorService.PushBean(bean.gameObject);
+                            yield break;
+                        }
+
+                        BeanMonitorService.MarkForeignBean(bean.gameObject);
+                        var profile = RemoteProfileStore.TryGet(winnerKey);
+                        if (profile != null)
+                            BeanMonitorService.Instance.StartCoroutine(CustomizationHandler.Apply(profile, bean.gameObject).WrapToIl2Cpp());
+                        else
+                            Plugin.Log.LogInfo($"no profile on file for {winnerKey}, their podium bean stays stock");
                         yield break;
                     }
                 }

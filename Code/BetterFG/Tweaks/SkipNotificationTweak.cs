@@ -16,40 +16,42 @@ namespace BetterFG.Tweaks
         public SkipNotificationTweak(IntPtr ptr) : base(ptr) { }
 
         public override string TweakId => "skip_notification";
-        public override string TweakLabel => "tweak.skip_notification";
+        public override string TweakLabel => "tweak.more_fall_feed_notifications";
         public override bool DefaultEnabled => false;
-        public override string TweakTooltip => "tweak.skip_notification.tip";
+        public override string TweakTooltip => "tweak.more_fall_feed_notifications.tip";
 
         public static SkipNotificationTweak Instance { get; private set; }
         void Awake() => Instance = this;
 
-        static readonly HashSet<string> _pendingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static readonly Dictionary<string, string> _pendingNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         internal static bool HasPending => _pendingNames.Count > 0;
 
-        public void Notify(string playerKey, GameMessageServerPlayerProgress progressMessage)
+        public void Notify(string playerKey, GameMessageServerPlayerProgress progressMessage, string labelId)
         {
             if (!IsEnabled) return;
             if (progressMessage == null || string.IsNullOrEmpty(playerKey)) return;
             if (BetterFG.UI.BetterFGUIMan.Instance == null) return;
             string display = PlayerUtils.CleanPlayerName(playerKey);
             if (string.IsNullOrEmpty(display)) return;
-            _pendingNames.Add(display);
-            Plugin.Log.LogInfo($"skip notif: pending += '{display}' (now {_pendingNames.Count})");
+            _pendingNames[display] = labelId;
+            Plugin.Log.LogInfo($"fall feed notif: pending += '{display}' as {labelId} (now {_pendingNames.Count})");
             BetterFG.UI.BetterFGUIMan.Instance.StartCoroutine(FireIfGameDidntEmit(display, progressMessage).WrapToIl2Cpp());
         }
 
-        internal static bool TryConsumeForRenderedName(string renderedNameText, out string matched)
+        internal static bool TryConsumeForRenderedName(string renderedNameText, out string matched, out string labelId)
         {
             matched = null;
+            labelId = null;
             if (string.IsNullOrEmpty(renderedNameText) || _pendingNames.Count == 0) return false;
             string bare = Regex.Replace(renderedNameText, "<[^>]*>", "").Trim();
             if (string.IsNullOrEmpty(bare)) return false;
             foreach (var p in _pendingNames)
             {
-                if (bare.Equals(p, StringComparison.OrdinalIgnoreCase))
+                if (bare.Equals(p.Key, StringComparison.OrdinalIgnoreCase))
                 {
-                    _pendingNames.Remove(p);
-                    matched = p;
+                    labelId = p.Value;
+                    _pendingNames.Remove(p.Key);
+                    matched = p.Key;
                     return true;
                 }
             }
@@ -59,7 +61,7 @@ namespace BetterFG.Tweaks
         IEnumerator FireIfGameDidntEmit(string displayName, GameMessageServerPlayerProgress msg)
         {
             for (int i = 0; i < 8; i++) yield return null;
-            if (!_pendingNames.Contains(displayName)) yield break;
+            if (!_pendingNames.ContainsKey(displayName)) yield break;
             ForceEmit(displayName, msg);
         }
 
@@ -79,19 +81,22 @@ namespace BetterFG.Tweaks
                 bool origElim = elimProp != null && (bool)elimProp.GetValue(handler);
                 bool origQual = qualProp != null && (bool)qualProp.GetValue(handler);
                 bool wasSkipping = msg.isSkipping;
+                bool wasDisconnected = msg.isDisconnected;
                 elimProp?.SetValue(handler, true);
                 qualProp?.SetValue(handler, true);
                 msg.isSkipping = false;
+                msg.isDisconnected = false;
                 try { mi.Invoke(handler, new object[] { msg }); }
                 finally
                 {
                     msg.isSkipping = wasSkipping;
+                    msg.isDisconnected = wasDisconnected;
                     elimProp?.SetValue(handler, origElim);
                     qualProp?.SetValue(handler, origQual);
                 }
-                Plugin.Log.LogInfo($"skip notif: force-emit for '{displayName}' (elimEnabled was {origElim}, qualEnabled was {origQual})");
+                Plugin.Log.LogInfo($"fall feed notif: force-emit for '{displayName}' (elimEnabled was {origElim}, qualEnabled was {origQual})");
             }
-            catch (Exception ex) { Plugin.Log.LogWarning("skip notif: " + ex.Message); }
+            catch (Exception ex) { Plugin.Log.LogWarning("fall feed notif: " + ex.Message); }
         }
     }
 
@@ -111,14 +116,14 @@ namespace BetterFG.Tweaks
                 if (body == null || nameText == null) return;
                 string curBody = body.text ?? "";
                 if (curBody.IndexOf("fallfeed-eliminate", StringComparison.Ordinal) < 0) return;
-                string label = Services.LocalizationService.Get("leaderboard.skipped");
+                if (!SkipNotificationTweak.TryConsumeForRenderedName(nameText.text, out string matched, out string labelId)) return;
+                string label = Services.LocalizationService.Get(labelId);
                 if (curBody.Contains(label)) return;
-                if (!SkipNotificationTweak.TryConsumeForRenderedName(nameText.text, out string matched)) return;
                 body.text = curBody + " " + label;
                 body.ForceMeshUpdate();
-                Plugin.Log.LogInfo($"skip append: '{matched}' -> '{body.text}'");
+                Plugin.Log.LogInfo($"fall feed append: '{matched}' -> '{body.text}'");
             }
-            catch (Exception ex) { Plugin.Log.LogWarning("skip append: " + ex.Message); }
+            catch (Exception ex) { Plugin.Log.LogWarning("fall feed append: " + ex.Message); }
         }
     }
 }

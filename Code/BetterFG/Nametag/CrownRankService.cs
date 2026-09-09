@@ -147,6 +147,16 @@ namespace BetterFG.Nametag
                 .Equals(FallGuysLib.Players.PlayerUtils.CleanPlayerName(localKey), System.StringComparison.OrdinalIgnoreCase);
         }
 
+        public static void SetCrownRankSafe(PlayerInfoDisplayCanvas canvas, int crownsEarned)
+        {
+            if (canvas == null || !CrownRankManager.HasInstance) return;
+            try { canvas.SetCrownRankByCrownsEarned(crownsEarned); }
+            catch (System.Exception ex)
+            {
+                Plugin.Log.LogInfo($"crown rank table isn't up yet, preview badge stays as-is ({ex.Message})");
+            }
+        }
+
         // allowDeferred: run RepinCrown's next-frame coroutine. false for the preview clone — that coroutine
         // re-applies against the LIVE local tag, which would stomp the real nametag from a preview refresh.
         public static void ApplyCrownTo(PlayerInfoDisplay display, CrownCfg cfg, bool allowDeferred = false, bool position = true)

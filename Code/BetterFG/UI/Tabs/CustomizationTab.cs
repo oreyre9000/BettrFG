@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -27,12 +27,25 @@ namespace BetterFG.UI.Tabs
         protected override string TitleId => "ui.ugc_customization";
         protected override string BgResource => "BetterFG.assets.ui.cskins.bg.png";
 
-        // pick-mode: when set, this tab is on loan to a picker flow (currently the pet wizard).
-        // Select on a Costume row hands the skin (or null for the back link) to this instead of the
-        // normal multi-select+Apply loadout flow - everything else about the tab is unchanged.
-        public Func<SkinInfo, Tab> PetPickTarget;
-        protected override string SwitchLabel => PetPickTarget != null ? "< Back" : "";
-        protected override Tab MakeSwitchTarget() => PetPickTarget != null ? PetPickTarget(null) : null;
+        // pick-mode: when set, this tab is on loan to a picker flow (the pet wizard). the whole
+        // multi-select UI works exactly as it does for the local player, it just reads and writes
+        // this list instead of the player's own loadout keys, and never applies to the live bean.
+        public List<BetterFG.Network.RemoteSkinEntry> PickTargetList;
+        public Action PickBack;
+        public Action OnPickChanged;
+        private bool PickMode => PickTargetList != null;
+        protected override string SwitchLabel => PickMode ? "ui.back_3" : "";
+
+        // the picker is pushed over the pet wizard's slot while the bean creator stays live behind
+        // it, so backing out is a pop, not a tab swap - hand it to the opener and switch to nothing
+        protected override Tab MakeSwitchTarget()
+        {
+            if (!PickMode) return null;
+            PickBack?.Invoke();
+            return null;
+        }
+
+        public override Tab MakeFallbackTab() => PickMode ? null : base.MakeFallbackTab();
 
 
         // ── Empty state ───────────────────────────────────────────────────────
@@ -361,21 +374,16 @@ namespace BetterFG.UI.Tabs
 
             var belowRt = contentRoot;
 
-            // pick mode (pets) never touches the local player's own loadout - no filter bar (stays
-            // pinned on Costume, the only type PetPickTarget accepts), no Fetch/Import/Apply/Remove
-            // All (all four write to the SAME shared settings keys and apply straight to the real
-            // local bean, regardless of what's being browsed for)
-            bool pickMode = PetPickTarget != null;
+            // pick mode (pets) never touches the local player's own loadout - no Fetch/Import/Apply/
+            // Remove All (all four write to the SAME shared settings keys and apply straight to the
+            // real local bean, regardless of what's being browsed for)
+            bool pickMode = PickMode;
 
-            if (!pickMode)
-            {
-                // ── Filter bar: Costumes | Accessories | Items ─────────────────────
-                BuildFilterBar(belowRt, y, w);
-                y += BTN_H + SH;
+            BuildFilterBar(belowRt, y, w);
+            y += BTN_H + SH;
 
-                _filterDivider2Rt = UGUIShip.CreatePanel(belowRt, PR(y, w, 1f), new Color(1f, 1f, 1f, 0.06f));
-                y += 1f + SH;
-            }
+            _filterDivider2Rt = UGUIShip.CreatePanel(belowRt, PR(y, w, 1f), new Color(1f, 1f, 1f, 0.06f));
+            y += 1f + SH;
 
             // filter bar block (bar + its spacing + this divider + spacing) is reclaimed when hidden
             _filterCollapse = BTN_H + 1f + 2f * SH;
@@ -951,7 +959,7 @@ namespace BetterFG.UI.Tabs
 
             // Action button. emotes are copy-to-clipboard (not select+apply) — everything else uses Select
             int captured = index;
-            if (type == SkinType.Emote)
+            if (type == SkinType.Emote && !PickMode)
             {
                 var copyBtn = UGUIShip.CreateButton(
                     rowGo.transform,
@@ -1229,14 +1237,6 @@ namespace BetterFG.UI.Tabs
             SkinInfo skin = availableSkins[index];
             SkinType type = SkinTypeParser.FromString(skin.type);
 
-            if (PetPickTarget != null)
-            {
-                if (type != SkinType.Costume) { SetStatus("ui.pets_can_only_wear_a_costume"); return; }
-                var target = PetPickTarget(skin);
-                if (target != null) BetterFGUIMan.Instance?.SwitchSlotTab(this, target);
-                return;
-            }
-
             // track every row whose selected-state changed so we can repaint just those in place
             // instead of rebuilding the entire list (the click freeze). a single click can flip
             // two rows: the clicked one + whatever costume/plinth got auto-deselected.
@@ -1307,6 +1307,21 @@ namespace BetterFG.UI.Tabs
 
         private void SaveSelection()
         {
+            if (PickMode)
+            {
+                PickTargetList.Clear();
+                foreach (int i in selectedIndices)
+                {
+                    if (i < 0 || i >= availableSkins.Count) continue;
+                    var picked = availableSkins[i];
+                    if (SkinTypeParser.FromString(picked.type) == SkinType.Plinth) continue;
+                    PickTargetList.Add(BeanLook.FromSkin(picked));
+                }
+                Plugin.Log.LogInfo($"pet picker now holds {PickTargetList.Count} ugc pieces");
+                OnPickChanged?.Invoke();
+                return;
+            }
+
             bool hadPlinth = MenuCustomizationApplication.TryGetSavedPlinthEntry(
                 out string plinthFile, out string plinthSource, out string plinthPath, out string plinthRepo,
                 out string plinthFolder);
@@ -1352,6 +1367,19 @@ namespace BetterFG.UI.Tabs
         }
 
         private void LoadHandOverrides() => _handOverrides = BetterFG.Network.RemoteProfileStore.LocalHandOverrides();
+
+        // pick mode's equivalent of TryRestoreSelection: light up whatever the pet already wears
+        private void SeedPickSelection()
+        {
+            selectedIndices.Clear();
+            foreach (var entry in PickTargetList)
+            {
+                string file = entry.file;
+                int idx = availableSkins.FindIndex(s => s.file == file);
+                if (idx >= 0) selectedIndices.Add(idx);
+            }
+            RefreshSkinList();
+        }
 
         private void TryRestoreSelection()
         {
@@ -1452,7 +1480,8 @@ namespace BetterFG.UI.Tabs
                 _restoredOnce = true;
                 // never pull the local player's own restored selection into a pick-mode instance -
                 // it has nothing to do with what's being picked for the pet
-                if (PetPickTarget == null) TryRestoreSelection();
+                if (PickMode) SeedPickSelection();
+                else TryRestoreSelection();
             }
 
             RetryPendingRestore();
@@ -1510,7 +1539,7 @@ namespace BetterFG.UI.Tabs
         // reflect already-applied slots back into the UI selection state
         private void SyncSelectedFromApplied()
         {
-            if (applicationService == null) return;
+            if (applicationService == null || PickMode) return;
             var applied = applicationService.GetActiveSlots();
             foreach (var slot in applied)
             {

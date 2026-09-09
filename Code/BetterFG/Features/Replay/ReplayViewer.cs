@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -186,10 +186,16 @@ namespace BetterFG.Features.Replay
             public Transform armLeft;
             public Transform armRight;
             public int cursor;
+            public float animAt;
+#if MACHINIMA
+            public MachinimaAction lastAction;
+#endif
             public GameObject nameLabel;
             public int crownState = -1;
             public bool isGhost;
             public bool isPet;
+            public bool isMachinima;
+            public readonly Dictionary<string, AnimationClip> emoteClips = new Dictionary<string, AnimationClip>();
         }
 
         readonly List<GameObject> _beans = new List<GameObject>();
@@ -223,8 +229,6 @@ namespace BetterFG.Features.Replay
         RectTransform _gizmoIcon;
         RectTransform _gizmoLineL;
         RectTransform _gizmoLineR;
-        readonly List<GameObject> _hidden = new List<GameObject>();
-        bool _menuMusicWasPlaying;
 
         float _time;
         float _shakeTime;
@@ -397,6 +401,9 @@ namespace BetterFG.Features.Replay
             _prevActiveScene = SceneManager.GetActiveScene();
 
             HideGame();
+#if MACHINIMA
+            SeedMachinima();
+#endif
             yield return StartCoroutine(LoadLevel().WrapToIl2Cpp());
             yield return null;
             RollRandomisers();
@@ -445,7 +452,7 @@ namespace BetterFG.Features.Replay
             ReplayVisibilityKeyframeWindow.Instance?.Close();
             ReplayPostFxKeyframeWindow.Instance?.Close();
             CloseContextMenu();
-            _audio.Release();
+            _audio?.Release();
             _world?.Release();
             _world = null;
             _speech?.Release();
@@ -630,35 +637,9 @@ namespace BetterFG.Features.Replay
             if (rolled > 0) Plugin.Log.LogInfo($"rolled {rolled} seeded randomisables, maze/randomised rooms should actually have content now");
         }
 
-        void HideGame()
-        {
-            {
-                for (int i = 0; i < SceneManager.sceneCount; i++)
-                {
-                    var s = SceneManager.GetSceneAt(i);
-                    if (!s.isLoaded) continue;
-                    foreach (var root in s.GetRootGameObjects())
-                    {
-                        if (root == null || !root.activeSelf) continue;
-                        if (root.name.StartsWith("BetterFG_") || root.name.StartsWith("BettrFG_")) continue;
-                        if (!_rec.isUgc && root.name.StartsWith("Background_")) continue;
-                        if (root.GetComponentInChildren<SoundBankLoadingListener>(true) != null) continue;
-                        root.SetActive(false);
-                        _hidden.Add(root);
-                    }
-                }
-
-                var gameUi = GameObject.Find("UICanvas_Client_V2(Clone)");
-                if (gameUi != null) { gameUi.SetActive(false); _hidden.Add(gameUi); }
-
-                var navOverlay = GameObject.Find("Prefab_UI_NavigationOverlay(Clone)/SafeArea/SubMenuNavigation_Center");
-                if (navOverlay != null) { navOverlay.SetActive(false); _hidden.Add(navOverlay); }
-            }
-
-            _menuMusicWasPlaying = MenuMusicService.IsPlaying;
-            MenuMusicService.Pause();
-            MenuMusicService.SetGameMenuMusicPaused(true);
-        }
+        void HideGame() =>
+            WorldHideService.HideWorld(this, root =>
+                !_rec.isUgc && !_rec.isMachinima && root.name.StartsWith("Background_"));
 
         void DisableControllerLeftovers()
         {
@@ -673,15 +654,7 @@ namespace BetterFG.Features.Replay
             }
         }
 
-        void ShowGame()
-        {
-            foreach (var go in _hidden)
-                if (go != null) go.SetActive(true);
-            _hidden.Clear();
-
-            if (_menuMusicWasPlaying) MenuMusicService.Resume();
-            MenuMusicService.SetGameMenuMusicPaused(MenuMusicService.Enabled);
-        }
+        int ShowGame() => WorldHideService.Show(this);
 
         IEnumerator LoadBeanPrefab()
         {
@@ -727,41 +700,54 @@ namespace BetterFG.Features.Replay
             Plugin.Log.LogWarning("no character prefab anywhere, this replay's beans will be missing");
         }
 
+        readonly Dictionary<uint, Transform> _speakers = new Dictionary<uint, Transform>();
+
+        Track SpawnOne(ReplayPlayer p, Dictionary<uint, FG.Common.Character.FallGuyVFXController> vfxControllers)
+        {
+            string label = string.IsNullOrEmpty(p.name) ? ("Player " + p.playerId) : p.name;
+            var bean = MakeBean(label, p);
+            if (bean == null) return null;
+
+            bean.transform.position = p.frames.Count > 0 ? p.frames[0].pos : new Vector3(_beans.Count * 1.6f, 0f, 0f);
+            bean.SetActive(true);
+            StartCoroutine(DressBean(bean, p).WrapToIl2Cpp());
+
+            var rag = bean.GetComponentInChildren<FG.Common.Character.RagdollController>(true);
+            var track = new Track
+            {
+                player = p,
+                bean = bean,
+                anim = BeanAnimationUtil.FindAnimator(bean),
+                upperBody = rag?.GetJoint(FG.Common.Character.RagdollJoint.ID.UpperBody)?.CachedTransform,
+                armLeft = rag?.GetJoint(FG.Common.Character.RagdollJoint.ID.ArmLeft)?.CachedTransform,
+                armRight = rag?.GetJoint(FG.Common.Character.RagdollJoint.ID.ArmRight)?.CachedTransform,
+                isMachinima = _rec.isMachinima,
+            };
+            if (track.anim != null)
+            {
+                track.anim.enabled = !track.isMachinima;
+                track.anim.speed = track.isMachinima ? 1f : 0f;
+            }
+            if (rag != null) rag.enabled = false;
+
+            _beans.Add(bean);
+            _tracks.Add(track);
+            _speakers[p.playerId] = bean.transform;
+            var vfx = bean.GetComponent<FG.Common.Character.FallGuyVFXController>();
+            if (vfx != null && vfxControllers != null) vfxControllers[p.playerId] = vfx;
+            _tail.Attach(p.playerId, bean);
+            _powerups.Attach(p.playerId, bean);
+#if MACHINIMA
+            if (track.isMachinima) StartCoroutine(LoadEmoteClips(track).WrapToIl2Cpp());
+#endif
+            return track;
+        }
+
         void SpawnBeans()
         {
-            var speakers = new Dictionary<uint, Transform>();
+            _speakers.Clear();
             var vfxControllers = new Dictionary<uint, FG.Common.Character.FallGuyVFXController>();
-            foreach (var p in _rec.players)
-            {
-                string label = string.IsNullOrEmpty(p.name) ? ("Player " + p.playerId) : p.name;
-                var bean = MakeBean(label, p);
-                if (bean == null) continue;
-
-                bean.transform.position = p.frames.Count > 0 ? p.frames[0].pos : new Vector3(_beans.Count * 1.6f, 0f, 0f);
-                bean.SetActive(true);
-                StartCoroutine(DressBean(bean, p).WrapToIl2Cpp());
-
-                var rag = bean.GetComponentInChildren<FG.Common.Character.RagdollController>(true);
-                var track = new Track
-                {
-                    player = p,
-                    bean = bean,
-                    anim = BeanAnimationUtil.FindAnimator(bean),
-                    upperBody = rag?.GetJoint(FG.Common.Character.RagdollJoint.ID.UpperBody)?.CachedTransform,
-                    armLeft = rag?.GetJoint(FG.Common.Character.RagdollJoint.ID.ArmLeft)?.CachedTransform,
-                    armRight = rag?.GetJoint(FG.Common.Character.RagdollJoint.ID.ArmRight)?.CachedTransform,
-                };
-                if (track.anim != null) track.anim.speed = 0f;
-                if (rag != null) rag.enabled = false;
-
-                _beans.Add(bean);
-                _tracks.Add(track);
-                speakers[p.playerId] = bean.transform;
-                var vfx = bean.GetComponent<FG.Common.Character.FallGuyVFXController>();
-                if (vfx != null) vfxControllers[p.playerId] = vfx;
-                _tail.Attach(p.playerId, bean);
-                _powerups.Attach(p.playerId, bean);
-            }
+            foreach (var p in _rec.players) SpawnOne(p, vfxControllers);
 
             if (_rec.tailEvents.Count > 0)
                 Plugin.Log.LogInfo($"{_rec.tailEvents.Count} tail events, {_tail.AttachedCount} of {_tracks.Count} beans wired up for them");
@@ -772,7 +758,7 @@ namespace BetterFG.Features.Replay
             SpawnPetBean();
 
             _speech = new ReplaySpeechPlayer(_rec, transform);
-            _speech.Prepare(speakers);
+            _speech.Prepare(_speakers);
 
             _vfx = new ReplayVfxPlayer(_rec, vfxControllers);
 
@@ -918,6 +904,7 @@ namespace BetterFG.Features.Replay
             {
                 foreach (var entry in p.bfgSkins)
                 {
+                    if (SkinTypeParser.FromString(entry.type) == SkinType.Emote) continue;
                     ActiveSkinSlot slot = null;
                     yield return loader.ResolveProfileSlot(entry, new Action<ActiveSkinSlot>(s => slot = s)).WrapToIl2Cpp();
                     if (slot == null || bean == null) continue;
@@ -1016,10 +1003,23 @@ namespace BetterFG.Features.Replay
                 float window = frames[hi].t - frames[lo].t;
                 if (window > 0.0001f) vel = (frames[hi].pos - frames[lo].pos) / window;
 
+                if (track.anim == null) continue;
                 BeanAnimationUtil.DriveLocomotion(track.anim, track.bean.transform, vel);
 
+#if MACHINIMA
+                if (track.isMachinima)
+                {
+                    track.anim.SetBool(BeanAnimationUtil.MovingParam, new Vector2(vel.x, vel.z).sqrMagnitude > 0.04f);
+                    StartMachinimaAction(track);
+                    float step = _time - track.animAt;
+                    track.animAt = _time;
+                    track.anim.Update(step > 0f ? step : 0f);
+                    SampleMachinimaEmote(track);
+                    continue;
+                }
+#endif
+
                 int hash = frames[i].stateHash;
-                if (track.anim == null) continue;
                 if (hash == 0)
                 {
                     if (track.isPet) track.anim.Update(0f);
@@ -1051,6 +1051,9 @@ namespace BetterFG.Features.Replay
             _speech?.Apply(_time, _cam);
             _postFx?.Apply(_time, _cam);
             UpdateHighlight();
+#if MACHINIMA
+            UpdateMoveMarker();
+#endif
             UpdateCameraGizmo();
         }
 
@@ -1100,6 +1103,7 @@ namespace BetterFG.Features.Replay
                 if (shown && track.player.outTime >= 0f && _time >= track.player.outTime) shown = false;
                 if (shown && track.isGhost && track.player.frames.Count > 0 && _time < track.player.frames[0].t) shown = false;
                 if (shown && track.isPet && _time < track.player.frames[0].t) shown = false;
+                if (shown && track.isMachinima && (_time < track.player.inTime || _time > track.player.outTime)) shown = false;
                 if (track.bean.activeSelf != shown) track.bean.SetActive(shown);
                 if (track.isPet) continue;
 
@@ -1297,6 +1301,7 @@ namespace BetterFG.Features.Replay
                 rb.isKinematic = true;
                 rb.useGravity = false;
             }
+
             foreach (var col in bean.GetComponentsInChildren<Collider>(true))
                 Destroy(col);
             return bean;
@@ -1324,7 +1329,11 @@ namespace BetterFG.Features.Replay
             UIScaleService.OnRescaled += RebuildTimeline;
         }
 
-        void OnDestroy() => UIScaleService.OnRescaled -= RebuildTimeline;
+        void OnDestroy()
+        {
+            UIScaleService.OnRescaled -= RebuildTimeline;
+            WorldHideService.Show(this);
+        }
 
         void RebuildTimeline()
         {
@@ -1620,10 +1629,16 @@ namespace BetterFG.Features.Replay
         void SyncUi()
         {
             PositionMarker();
-            RefreshKeyframeTicks();
-            RefreshVisibilityTicks();
-            RefreshPostFxTicks();
-            RefreshCutOverlays();
+            if (_solo == null)
+            {
+                RefreshKeyframeTicks();
+                RefreshVisibilityTicks();
+                RefreshPostFxTicks();
+                RefreshCutOverlays();
+            }
+#if MACHINIMA
+            RefreshMachinimaLanes();
+#endif
             _clock.text = Stamp(_time) + "  /  " + Stamp(_rec.trimEnd);
             UGUIShip.RelabelText(_playLabel, _paused ? "ui.paused" : "ui.playing");
             RefreshPlayPauseIcon();
@@ -1646,9 +1661,15 @@ namespace BetterFG.Features.Replay
 
         void Update()
         {
-            if (_exiting || _exporting || _cam == null || _loading) return;
+            if (_exiting || _exporting) return;
+            if (_loading || _cam == null)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape)) Exit();
+                return;
+            }
 
             bool overlay = (BetterFGUIMan.Instance != null && BetterFGUIMan.Instance.IsVisible)
+                || BeanCreatorScreen.Instance != null
                 || (BetterFG.UI.SideWheel.SideWheelManager.Instance != null
                     && BetterFG.UI.SideWheel.SideWheelManager.Instance.IsWheelVisible);
             if (_overlayHidden != overlay)
@@ -1668,7 +1689,11 @@ namespace BetterFG.Features.Replay
 
             if (_picking)
             {
+#if MACHINIMA
+                if (!UpdateMovePick()) UpdateTargetPick();
+#else
                 UpdateTargetPick();
+#endif
                 return;
             }
 
@@ -1680,7 +1705,7 @@ namespace BetterFG.Features.Replay
                 else if (ReplayKeyframeWindow.Instance != null || ReplayVisibilityKeyframeWindow.Instance != null) Deselect();
             }
 
-            if (Input.GetMouseButtonDown(0) && !PointerOverUi()) { _worldHeld = true; _worldTap = true; }
+            if (Input.GetMouseButtonDown(0) && !PointerOverUi()) { _worldHeld = true; _worldTap = true; CloseContextMenu(); }
             if (_worldHeld && ControllerManager.Stick != Vector2.zero) _worldTap = false;
             bool worldTap = false;
             if (Input.GetMouseButtonUp(0)) { worldTap = _worldHeld && _worldTap; _worldHeld = false; }
@@ -1831,11 +1856,11 @@ namespace BetterFG.Features.Replay
             float sf = _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
             return new Vector2(
                 Input.mousePosition.x / sf - MARGIN,
-                TIMELINE_Y + TIMELINE_H - Input.mousePosition.y / sf);
+                TIMELINE_Y + TimelineH - Input.mousePosition.y / sf);
         }
 
         bool OverTimeline(Vector2 cursor) =>
-            cursor.x >= 0f && cursor.x <= _trackLeft + _trackWidth + PAD && cursor.y >= 0f && cursor.y <= TIMELINE_H;
+            cursor.x >= 0f && cursor.x <= _trackLeft + _trackWidth + PAD && cursor.y >= 0f && cursor.y <= TimelineH;
 
         static bool OverEdgeBand(Vector2 cursor) => cursor.y >= EDGE_Y - 6f && cursor.y < SCRUB_Y;
 
@@ -1849,7 +1874,7 @@ namespace BetterFG.Features.Replay
 
         static bool OverCameraRow(Vector2 cursor) => cursor.y >= FX_SPLIT_Y && cursor.y <= LANES_BOTTOM;
 
-        static bool OverZoomBar(Vector2 cursor) => cursor.y >= LANES_BOTTOM && cursor.y <= ZOOMBAR_Y + ZOOMBAR_H + 2f;
+        bool OverZoomBar(Vector2 cursor) => cursor.y >= PlayerLanesBottom && cursor.y <= ZoomBarY + ZOOMBAR_H + 2f;
 
         float TimeAt(float x) =>
             FractionToTime(Mathf.Clamp01(_trackWidth > 0f ? (x - _trackLeft) / _trackWidth : 0f));
@@ -1949,39 +1974,46 @@ namespace BetterFG.Features.Replay
 
         IEnumerator ExitRoutine()
         {
-            ReplayKeyframeWindow.Instance?.Close();
-            ReplayVisibilityKeyframeWindow.Instance?.Close();
-            ReplayPostFxKeyframeWindow.Instance?.Close();
-            _audio.Release();
-            _world?.Release();
-            _speech?.Release();
-            _postFx?.Release();
-            RestoreCamera();
+            try
+            {
+                ReplayKeyframeWindow.Instance?.Close();
+                ReplayVisibilityKeyframeWindow.Instance?.Close();
+                ReplayPostFxKeyframeWindow.Instance?.Close();
+                _audio?.Release();
+                _world?.Release();
+                _speech?.Release();
+                _postFx?.Release();
+                RestoreCamera();
 
-            foreach (var bean in _beans)
-                if (bean != null) Destroy(bean);
-            _beans.Clear();
+                foreach (var bean in _beans)
+                    if (bean != null) Destroy(bean);
+                _beans.Clear();
 
-            if (_canvas != null) Destroy(_canvas.gameObject);
+                if (_canvas != null) Destroy(_canvas.gameObject);
 
-            if (_prevActiveScene.IsValid() && _prevActiveScene.isLoaded)
-                SceneManager.SetActiveScene(_prevActiveScene);
+                if (_prevActiveScene.IsValid() && _prevActiveScene.isLoaded)
+                    SceneManager.SetActiveScene(_prevActiveScene);
+            }
+            catch (Exception ex) { Plugin.Log.LogError($"replay teardown threw, carrying on so the game still comes back: {ex}"); }
 
             yield return StartCoroutine(UnloadLevel().WrapToIl2Cpp());
 
-            int restored = _hidden.Count;
-            ShowGame();
+            int restored = ShowGame();
 
-            int orphans = FmodUtil.StopSnapshots(null);
-            Plugin.Log.LogInfo($"out of the replay viewer, {restored} game roots back on, {orphans} snapshots killed before they could outlive the client");
-
-            var client = GlobalGameStateClient.Instance;
-            if (client != null)
+            try
             {
-                ReplayMenuReloadGuard.Arm();
-                client.ForceMainMenuSceneReload = true;
-                client.ReloadGame(true, EnumDisconnectReasonGraceful.NoReason);
+                int orphans = FmodUtil.StopSnapshots(null);
+                Plugin.Log.LogInfo($"out of the replay viewer, {restored} game roots back on, {orphans} snapshots killed before they could outlive the client");
+
+                var client = GlobalGameStateClient.Instance;
+                if (client != null)
+                {
+                    ReplayMenuReloadGuard.Arm();
+                    client.ForceMainMenuSceneReload = true;
+                    client.ReloadGame(true, EnumDisconnectReasonGraceful.NoReason);
+                }
             }
+            catch (Exception ex) { Plugin.Log.LogError($"replay exit couldn't kick the menu reload: {ex}"); }
 
             float remaining = _exitStart + 1f - Time.realtimeSinceStartup;
             if (remaining > 0f) yield return new WaitForSecondsRealtime(remaining);

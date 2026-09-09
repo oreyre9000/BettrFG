@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -37,6 +37,7 @@ namespace BetterFG.Features.CustomLights
         {
             _roundLights.Clear();
             _roundLightsParsed = false;
+            _delayedRunning = false;
         }
 
         private static void ParseRoundLights()
@@ -243,6 +244,7 @@ namespace BetterFG.Features.CustomLights
                 for (int i = 0; i < w; i++) yield return null;
                 Sync();
                 CustomIntroCams.CustomIntroCams.Sync();
+                NeonMaterial.NeonMaterial.Sync();
             }
             _delayedRunning = false;
         }
@@ -270,16 +272,19 @@ namespace BetterFG.Features.CustomLights
                     }
                 }
 
-                foreach (var mr in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
+                if (!inEditor)
                 {
-                    if (mr == null) continue;
-                    var t = mr.transform;
-                    var root = t.parent != null && t.parent.name.StartsWith(MarkerName, StringComparison.Ordinal) ? t.parent : t;
-                    if (!root.name.StartsWith(MarkerName, StringComparison.Ordinal)) continue;
-                    if (handled.Contains(root.gameObject.GetInstanceID())) continue;
-                    if (Vector3.Distance(root.eulerAngles, IdentityRotation) >= RotationTolerance) continue;
-                    handled.Add(root.gameObject.GetInstanceID());
-                    ApplyLight(root, null, inEditor);
+                    foreach (var mr in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
+                    {
+                        if (mr == null) continue;
+                        var t = mr.transform;
+                        var root = t.parent != null && t.parent.name.StartsWith(MarkerName, StringComparison.Ordinal) ? t.parent : t;
+                        if (!root.name.StartsWith(MarkerName, StringComparison.Ordinal)) continue;
+                        if (handled.Contains(root.gameObject.GetInstanceID())) continue;
+                        if (Vector3.Distance(root.eulerAngles, IdentityRotation) >= RotationTolerance) continue;
+                        handled.Add(root.gameObject.GetInstanceID());
+                        ApplyLight(root, null, inEditor);
+                    }
                 }
 
                 if (_markers.Count > 0)

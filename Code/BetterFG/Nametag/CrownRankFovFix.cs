@@ -50,46 +50,25 @@ namespace BetterFG.Nametag
             }
             if (_uiCam == null || _uiCam.orthographic) return;
 
-            float mainTan = Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
-            if (mainTan <= 0.0001f) return;
-            float k = Mathf.Tan(_uiCam.fieldOfView * 0.5f * Mathf.Deg2Rad) / mainTan;
+            float fov = cam.fieldOfView;
+            if (Mathf.Abs(_uiCam.fieldOfView - fov) > 0.0005f) _uiCam.fieldOfView = fov;
 
-            bool identity = Mathf.Abs(k - 1f) < 0.0005f;
+            if (!CrownRankService.Enabled) return;
 
             var rows = Rows(hud);
             if (rows == null) return;
 
-            Matrix4x4 view = Matrix4x4.identity, world = Matrix4x4.identity;
-            if (!identity)
-            {
-                view = cam.worldToCameraMatrix;
-                world = cam.cameraToWorldMatrix;
-            }
-
             var list = rows.entries;
-            var scale = new Vector3(k, k, 1f);
             for (int i = 0; i < list.Count; i++)
             {
                 var e = list[i];
                 if (e.container.m_CachedPtr == IntPtr.Zero) { rows.count = -1; return; }
-
-                if (e.lastScale != scale) { e.container.localScale = scale; e.lastScale = scale; }
-
-                if (identity)
-                {
-                    // hasChanged only goes true when something actually moved the container, so the
-                    // write is skipped outright instead of reading localPosition back to compare
-                    if (!e.container.hasChanged) continue;
-                    e.container.localPosition = Vector3.zero;
-                    e.container.hasChanged = false;
-                    continue;
-                }
-
-                e.root.GetPositionAndRotation(out var rootPos, out _);
-                e.container.GetPositionAndRotation(out _, out var rot);
-
-                var v = view.MultiplyPoint3x4(rootPos);
-                e.container.SetPositionAndRotation(world.MultiplyPoint3x4(new Vector3(v.x * k, v.y * k, v.z)), rot);
+                if (e.lastScale != Vector3.one) { e.container.localScale = Vector3.one; e.lastScale = Vector3.one; }
+                // hasChanged only goes true when something actually moved the container, so the
+                // write is skipped outright instead of reading localPosition back to compare
+                if (!e.container.hasChanged) continue;
+                e.container.localPosition = Vector3.zero;
+                e.container.hasChanged = false;
             }
         }
 
