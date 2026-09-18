@@ -197,6 +197,26 @@ namespace BettrFG.uGUI
             return tmp;
         }
 
+        public const int ROW_MAX_LINES = 3;
+
+        // grows a row's LayoutElement height (and the label's own rect) to fit however many wrapped
+        // lines the text actually needs, instead of clipping against the row above/below it
+        public static void FitWrappedRow(LayoutElement le, Text lbl, float x, float availW, float rowH, int maxLines = ROW_MAX_LINES)
+        {
+            lbl.horizontalOverflow = HorizontalWrapMode.Wrap;
+            lbl.verticalOverflow = VerticalWrapMode.Overflow;
+
+            float wide = PreferredWidth(lbl);
+            if (wide <= availW || availW <= 0f) return;
+
+            float single = PreferredHeight(lbl, 100000f);
+            float wrapped = PreferredHeight(lbl, availW);
+            float pad = Mathf.Max(0f, rowH - single);
+            float want = Mathf.Min(wrapped, single * maxLines) + pad;
+            le.preferredHeight = want;
+            SetPixelRect(lbl.rectTransform, new Rect(x, 0f, availW, want));
+        }
+
         // �� Flow label (inside vertical layout groups) ������������������������
         public static Text CreateFlowLabel(Transform parent, string text, int fontSize, Color color, bool multiline = false)
         {

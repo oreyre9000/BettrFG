@@ -38,6 +38,8 @@ namespace BetterFG.Patches.BettrFGRounds
         {
             Safe(BetterFG.Features.UnityRound.RoundMusicService.Stop, "round music stop");
             Safe(UnityRoundAbortHooks.Remove, "abort hooks");
+            Safe(() => BetterFGUnityRounds.ResetRoundState(unloadBundle: true), "round state");
+            Safe(BetterFGUnityRounds.ForgetEnvironment, "environment snapshot");
             Safe(BetterFG.Features.Replay.FeatureReplay.OnClientGameManagerShutdown, "replay");
             Safe(BetterFG.Tweaks.CinematicSpectatorTweak.OnClientGameManagerShutdown, "spectator cam");
             Safe(BetterFG.Tweaks.CreativeIntroCameraTweak.OnClientGameManagerShutdown, "creative intro cam");
@@ -112,7 +114,16 @@ namespace BetterFG.Patches.BettrFGRounds
     {
         static Harmony _harmony;
 
-        public static bool SkipOriginal() => false;
+        // AbortGrab/AbortMantling are bodyless forwarders, so il2cpp deduplicates them onto one
+        // shared native address with VolumeZone.Update, InputDevice.NotifyRemoved,
+        // SimpleCarrouselInputHandler.UpdateCurrentIndexWithLastSelected and
+        // MotorFunctionWithGrabTarget.TargetObjectIsDestroyed. harmony detours the address, not the
+        // method, so an unconditional skip took all of those down for the length of a unity round.
+        // gate on what the call actually arrived on.
+        public static bool SkipOriginal(Il2CppSystem.Object __instance)
+            => __instance != null
+               && __instance.TryCast<MotorFunctionGrab>() == null
+               && __instance.TryCast<MotorFunctionMantle>() == null;
 
         // the grab/mantle hooks below only ever do anything inside one of our own rounds, but left on
         // attributes they sat in the character motor system permanently — ShouldApplyStateSnapshot alone

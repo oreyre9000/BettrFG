@@ -54,19 +54,22 @@ namespace BetterFG.Patches.GameStates
 
             MenuCustomizationApplication.Instance?.CacheBgImageBase();
 
+            BetterFG.Customization.TexturePacks.TexturePackRuntimeService.SweepLoadedTextures();
+
             BetterFG.Utilities.PatchGate.SetRoundActive(false);
             // copy-code prompt hooks go in here and stay in — nothing can reach a lobby or show
             // tile before the menu exists. Install() no-ops once they're live.
             BetterFG.Utilities.PatchGate.SetActive("copycode.prompts", true);
             BetterFG.Utilities.PatchGate.SetActive("pastecode.prompts", true);
             BetterFG.Tweaks.BfgTweak.RaiseMainMenuEntered();
+            BetterFG.Core.BfgBinds.OnMainMenuEntered();
             BetterFG.Features.CustomizeFallGuys.FeatureCustomizeFallGuys.SetInRound(false);
             BetterFG.Services.DiscordPresenceService.OnMainMenuEntered(__instance);
             BetterFG.Features.Replay.ReplayViewer.OnMainMenuEntered();
             BetterFG.Patches.SeasonProgressHoverPatch.SetMenuActive(true);
             BetterFG.Customization.Pets.PetPreview.RetryOnMainMenuEntered();
-            BetterFG.Features.CustomBackgrounds.Definers.Teardown();
-            BetterFG.Features.CustomBackgrounds.DisableBackgroundRulebook.OnMainMenuEntered();
+            BetterFG.Features.CreativeExpansion.Definers.Teardown();
+            BetterFG.Features.CreativeExpansion.DisableBackgroundRulebook.OnMainMenuEntered();
 
             BetterFG.UI.Tabs.NametagTab.CacheNameAssets();
             BetterFG.UI.Tabs.AllCosmeticsTab.RefreshLiveInstances();
@@ -406,6 +409,7 @@ namespace BetterFG.Patches.GameStates
 
             SkinApplicationService.Instance?.ReapplyExpectedGameCosmeticVisuals();
             BetterFG.Services.DiscordPresenceService.Push();
+            BetterFG.Customization.TexturePacks.TexturePackRuntimeService.SweepLoadedTextures();
         }
     }
 
@@ -500,6 +504,7 @@ namespace BetterFG.Patches.GameStates
         {
             BetterFG.Services.DiscordPresenceService.OnShowSelectorClosed();
             BetterFG.Tweaks.ShowTilePlaysTweak.PruneCache();
+            BetterFG.Tweaks.ShowTileDislikesTweak.PruneCache();
             MenuCustomizationApplication.AutoApplyCamFromSettings();
 
             var app = MenuCustomizationApplication.Instance;
@@ -579,7 +584,7 @@ namespace BetterFG.Patches.GameStates
         {
             BeanMonitorService.CheckLevelEditorBean();
             CameraUtils.DisableXRayRenderer();
-            BetterFG.Features.CustomIntroCams.CustomIntroCams.ShowShotGizmos(false);
+            BetterFG.Features.CreativeExpansion.CustomIntroCams.ShowShotGizmos(false);
         }
     }
 
@@ -593,10 +598,15 @@ namespace BetterFG.Patches.GameStates
             BetterFG.Nametag.NametagIconApplicator.ForgetRecentKeys();
             BeanMonitorService.ForgetForeignBeans();
             BetterFGUnityRounds.MarkSceneReadyAndInstantiateQueuedRound();
-            BetterFG.Features.CustomLights.CustomLights.InvalidateRoundLights();
-            BetterFG.Features.NeonMaterial.NeonMaterial.ResetEditorState();
+            BetterFG.Features.CreativeExpansion.CreativeGroups.OnLevelLoaded();
+            BetterFG.Features.CreativeExpansion.CustomLights.InvalidateRoundLights();
+            BetterFG.Features.CreativeExpansion.NeonMaterial.ResetEditorState();
+            BetterFG.Features.CreativeExpansion.RuleColours.ResetEditorState();
+            BetterFG.Features.CreativeExpansion.SlimeColours.ResetEditorState();
+            BetterFG.Features.CreativeExpansion.ObjectThemes.ResetEditorState();
             BetterFG.Utilities.IdentifierObjects.InvalidateLevelJson();
-            BetterFG.Features.CustomBackgrounds.DisableBackgroundRulebook.Invalidate();
+            BetterFG.Features.CreativeExpansion.DisableBackgroundRulebook.Invalidate();
+            BetterFG.Customization.TexturePacks.TexturePackRuntimeService.SweepLoadedTextures();
 
             var host = BeanMonitorService.Instance;
             if (host != null) host.StartCoroutine(AfterLoad().WrapToIl2Cpp());
@@ -613,8 +623,8 @@ namespace BetterFG.Patches.GameStates
 
         private static void AfterLoadNow()
         {
-            BetterFG.Features.CustomBackgrounds.Definers.Recheck();
-            BetterFG.Features.CustomLights.CustomLights.SyncDelayed();
+            BetterFG.Features.CreativeExpansion.Definers.Recheck();
+            BetterFG.Features.CreativeExpansion.CustomLights.SyncDelayed();
             BetterFG.Customization.UI.CreativeGizmoScale.Apply();
             BetterFG.Tweaks.RetroGoopMaterialsTweak.OnRoundLoaded();
 
@@ -704,6 +714,17 @@ namespace BetterFG.Patches.GameStates
             MenuCustomizationApplication.Instance?.QueueForegroundScope(__instance.transform);
             BetterFG.Features.Stars.FeatureStars.OnSetIndividualShowData(__instance, showSelectorShow);
             BetterFG.Tweaks.ShowTilePlaysTweak.OnSetShowData(__instance, showSelectorShow);
+            BetterFG.Tweaks.ShowTileDislikesTweak.OnSetShowData(__instance, showSelectorShow);
+        }
+    }
+
+    [HarmonyPatch(typeof(PrivateLobbyShowTagViewModel), nameof(PrivateLobbyShowTagViewModel.SetPrivateLobbyShowTagData))]
+    internal static class PrivateLobbyShowTagDataPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(PrivateLobbyShowTagViewModel __instance)
+        {
+            BetterFG.Tweaks.ShowTileDislikesTweak.OnPlobbyTag(__instance);
         }
     }
 
@@ -728,6 +749,7 @@ namespace BetterFG.Patches.GameStates
         {
             if (__instance == null) return;
             MenuCustomizationApplication.Instance?.QueueForegroundScope(__instance.transform, true);
+            BetterFG.Tweaks.ShowTileDislikesTweak.OnBrowserTile(__instance);
         }
     }
 
@@ -755,8 +777,7 @@ namespace BetterFG.Patches.GameStates
         public static void Postfix(Wushu.LevelEditor.Runtime.UI.LevelBrowser.LevelBrowserTileViewModel __instance)
         {
             if (__instance == null) return;
-            BetterFG.Features.LevelPort.LevelBrowserPortPrompt.OnTileSelected(__instance);
-            BetterFG.Features.CopyCode.CopyCodePrompt.OnLevelTileSelected(__instance);
+            BetterFG.Features.CreativeExpansion.LevelBrowserPortPrompt.OnTileSelected(__instance);
         }
     }
 
@@ -772,7 +793,7 @@ namespace BetterFG.Patches.GameStates
         public static void Postfix(FGClient.UI.PrivateLobby.PrivateLobbyScreenViewModel __instance)
         {
             if (__instance == null) return;
-            BetterFG.Features.CopyCode.CopyCodePrompt.OnLobbyFocus(__instance);
+            BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnLobbyFocus(__instance);
         }
     }
 
@@ -781,7 +802,7 @@ namespace BetterFG.Patches.GameStates
     internal static class PrivateLobbyScreenLoseFocusPatch
     {
         [HarmonyPostfix]
-        public static void Postfix() => BetterFG.Features.CopyCode.CopyCodePrompt.OnLobbyBlur();
+        public static void Postfix() => BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnLobbyBlur();
     }
 
     // "Enter Code" input field enable/disable. feeds PasteCodePrompt so the paste-code nav prompt
@@ -794,7 +815,7 @@ namespace BetterFG.Patches.GameStates
         public static void Postfix(InputCodeViewModel __instance)
         {
             if (__instance == null) return;
-            BetterFG.Features.PasteCode.PasteCodePrompt.OnInputEnabled(__instance);
+            BetterFG.Features.CreativeExpansion.PasteCodePrompt.OnInputEnabled(__instance);
         }
     }
 
@@ -803,7 +824,7 @@ namespace BetterFG.Patches.GameStates
     internal static class InputCodeViewModelDisabledPatch
     {
         [HarmonyPostfix]
-        public static void Postfix() => BetterFG.Features.PasteCode.PasteCodePrompt.OnInputDisabled();
+        public static void Postfix() => BetterFG.Features.CreativeExpansion.PasteCodePrompt.OnInputDisabled();
     }
 
     // the game's own OnSelect/OnDeselect chain doesn't reliably hand focus back to the private
@@ -811,8 +832,15 @@ namespace BetterFG.Patches.GameStates
     // dead, mouse-only, until something else forces the lobby to regain focus. restore it
     // ourselves right at the field's own defocus/submit events. same GameObject lookup path
     // LobbyAudioPromptTweak / LobbyCustomiserTweak already use.
+    //
+    // hooked on the input field, NOT InputCodeViewModel.OnDeselect(string): il2cpp deduplicates
+    // identical method bodies, and that one shares its native address with the parameterless
+    // LevelEditorColourPickerInputFieldItem.HideCaret(). harmony detours the address, so the glue
+    // read a nonexistent string argument off a garbage register and hard-crashed the process in
+    // Il2CppStringToManaged the moment any creative colour picker opened. Kick() no-ops off the
+    // lobby, so the wider hook costs nothing.
     [Utilities.BfgPatchGate("pastecode.prompts")]
-    [HarmonyPatch(typeof(InputCodeViewModel), "OnDeselect")]
+    [HarmonyPatch(typeof(UICustomTMP_InputField), nameof(UICustomTMP_InputField.OnDeselect))]
     internal static class InputCodeViewModelDeselectPatch
     {
         [HarmonyPostfix]
@@ -849,7 +877,7 @@ namespace BetterFG.Patches.GameStates
     {
         [HarmonyPostfix]
         public static void Postfix(ShowSelectorShow showSelectorShow)
-            => BetterFG.Features.CopyCode.CopyCodePrompt.OnShowPreviewed(showSelectorShow);
+            => BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnShowPreviewed(showSelectorShow);
     }
 
     // highlight moved onto a nested-shows entry point — a folder of shows, no share code of its own
@@ -858,7 +886,7 @@ namespace BetterFG.Patches.GameStates
     internal static class ShowPreviewNestedShowsPatch
     {
         [HarmonyPostfix]
-        public static void Postfix() => BetterFG.Features.CopyCode.CopyCodePrompt.OnShowPreviewCleared();
+        public static void Postfix() => BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnShowPreviewCleared();
     }
 
     [Utilities.BfgPatchGate("copycode.prompts")]
@@ -866,7 +894,7 @@ namespace BetterFG.Patches.GameStates
     internal static class ShowSelectorLoseFocusPatch
     {
         [HarmonyPostfix]
-        public static void Postfix() => BetterFG.Features.CopyCode.CopyCodePrompt.OnShowPreviewCleared();
+        public static void Postfix() => BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnShowPreviewCleared();
     }
 
     // private lobby's own show list. the manager owns the highlight and exposes the highlighted
@@ -879,7 +907,7 @@ namespace BetterFG.Patches.GameStates
         public static void Postfix(FragglePlobbiesManager __instance)
         {
             if (__instance == null) return;
-            BetterFG.Features.CopyCode.CopyCodePrompt.OnPrivateLobbyShowHighlighted(__instance);
+            BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnPrivateLobbyShowHighlighted(__instance);
         }
     }
 
@@ -890,10 +918,17 @@ namespace BetterFG.Patches.GameStates
         [HarmonyPostfix]
         public static void Postfix()
         {
-            BetterFG.Features.CopyCode.CopyCodePrompt.OnPrivateLobbyShowListClosed();
+            BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnPrivateLobbyShowListClosed();
             BetterFG.Tweaks.RandomShowSelectTweak.OnShowListClosed();
             BetterFG.Tweaks.LobbyCustomiserTweak.OnPopupClosed();
         }
+    }
+
+    [HarmonyPatch(typeof(FragglePlobbiesManager), nameof(FragglePlobbiesManager.SelectShow))]
+    internal static class PrivateLobbySelectShowPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() => !BetterFG.Tweaks.LobbyShowSearchTweak.ShouldSuppressConfirm();
     }
 
     [HarmonyPatch(typeof(ShowsManager), nameof(ShowsManager.RefreshShowSelectorPageData))]
@@ -1003,7 +1038,7 @@ namespace BetterFG.Patches.GameStates
         {
             var app = MenuCustomizationApplication.Instance;
             app?.StartCoroutine(app.ReapplySpecialForegroundNextFrame(MenuCustomizationApplication.SpecialScreen.PrivateLobbyShowSelect).WrapToIl2Cpp());
-            BetterFG.Tweaks.LobbyShowSearchTweak.OnShowListAwake();
+            BetterFG.Tweaks.LobbyShowSearchTweak.OnShowListAwake(__instance);
             BetterFG.Tweaks.RandomShowSelectTweak.OnShowListAwake(__instance);
             BetterFG.Tweaks.LobbyCustomiserTweak.OnPopupOpened();
         }
@@ -1324,6 +1359,7 @@ namespace BetterFG.Patches.GameStates
         public static void Postfix(Component __instance)
         {
             BetterFG.Features.TimePlacement.TimePlacementBannerReparent.Apply(__instance);
+            BetterFG.Features.QualificationTime.FeatureQualificationTime.OnBannerOpened(__instance);
 
             var app = MenuCustomizationApplication.Instance;
             bool eliminatedBanner = false;

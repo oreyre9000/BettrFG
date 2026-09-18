@@ -21,7 +21,7 @@ namespace BetterFG.Tweaks
 
         public override string TweakId => "cinematic_spectator";
         public override string TweakLabel => "tweak.custom_spectating";
-        public override bool DefaultEnabled => false;
+        public override bool DefaultEnabled => true;
         public override string TweakTooltip => "ui.take_the_camera_over_while_spectating_cinematic";
 
         public static CinematicSpectatorTweak Instance { get; private set; }

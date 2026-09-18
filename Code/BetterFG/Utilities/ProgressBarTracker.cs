@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BettrFG.uGUI;
 using UnityEngine;
 
 namespace BetterFG.Utilities
@@ -8,7 +9,7 @@ namespace BetterFG.Utilities
     public class ProgressBarTracker
     {
         private readonly List<string> _keys = new List<string>();
-        private readonly List<RectTransform> _fills = new List<RectTransform>();
+        private readonly List<LoadingBar> _fills = new List<LoadingBar>();
 
         public void Clear()
         {
@@ -16,7 +17,7 @@ namespace BetterFG.Utilities
             _fills.Clear();
         }
 
-        public void Add(string key, RectTransform fill)
+        public void Add(string key, LoadingBar fill)
         {
             _keys.Add(key);
             _fills.Add(fill);
@@ -29,7 +30,7 @@ namespace BetterFG.Utilities
                 var fill = _fills[i];
                 if (fill == null) continue;
                 progress.TryGetValue(_keys[i], out float p);
-                fill.anchorMax = new Vector2(Mathf.Clamp01(p), 1f);
+                fill.Set(p);
             }
         }
     }

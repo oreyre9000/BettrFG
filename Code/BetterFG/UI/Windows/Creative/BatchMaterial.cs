@@ -3,9 +3,8 @@
 namespace BetterFG.UI.Windows.Creative
 {
     // Batch surface/material over the selection. Objects carry surface on LevelEditorSurfaceDefinitionParameter.
-    // We DON'T call SetParameterIndex — it drives UpdateParameterEntriesUI, which NREs when the parameter
-    // menu isn't open (the crash we hit). Instead we apply the surface SO directly via ApplySurface and set
-    // the selected-index backing field ourselves, so it sticks and round-trips for undo without touching UI.
+    // SelectedParameterIndex is 1-based (0 = no surface, N = _enabledSurfaces[N-1]); we go through the game's
+    // own SetParameterIndex, the same call its parameter menu entry makes.
     public static class BatchMaterial
     {
         public static int SetSlime() => Apply(slime: true);
@@ -58,19 +57,15 @@ namespace BetterFG.UI.Windows.Creative
                 var surf = BatchTargets.GetSurfaceParam(obj);
                 if (surf == null) { noParam++; continue; }
 
-                int target;
-                LevelEditorSurfaceDefinitionSO so;
+                int target = 0;
                 if (slime)
                 {
-                    target = FindSlimeIndex(surf, out so);
+                    target = FindSlimeIndex(surf);
                     if (target < 0) { noSlime++; continue; }
                 }
-                else { target = 0; so = null; } // 0 = no surface, null SO clears it
 
                 var snap = new BatchEditHistory.ObjectSnap { Obj = obj, SurfaceIndex = surf.SelectedParameterIndex };
-                // clearing to none needs the responder refresh to repaint; applying a real surface
-                // (slime) works with ApplySurface alone and breaks if we also refresh.
-                BatchTargets.ApplySurfaceIndex(surf, target, so, refreshResponders: !slime);
+                BatchTargets.ApplySurfaceIndex(surf, target);
                 entry.Snaps.Add(snap);
                 touched++;
             }
@@ -81,9 +76,8 @@ namespace BetterFG.UI.Windows.Creative
 
         // find the slime entry in this object's enabled surfaces, returning its index + SO. scans the
         // collection by index and matches a slime key. logs the available keys if nothing matched.
-        private static int FindSlimeIndex(LevelEditorSurfaceDefinitionParameter surf, out LevelEditorSurfaceDefinitionSO so)
+        private static int FindSlimeIndex(LevelEditorSurfaceDefinitionParameter surf)
         {
-            so = null;
             var col = surf._enabledSurfaces;
             var names = LevelEditorSurfaceDefinitionParameter._enabledSurfaceNames;
             int count = names != null ? names.Count : 0;
@@ -93,11 +87,7 @@ namespace BetterFG.UI.Windows.Creative
             {
                 var candidate = col.GetSurfaceByIndex(i);
                 string key = candidate != null ? candidate.Key : names[i];
-                if (!string.IsNullOrEmpty(key) && key.ToLowerInvariant().Contains("slime"))
-                {
-                    so = candidate;
-                    return i;
-                }
+                if (!string.IsNullOrEmpty(key) && key.ToLowerInvariant().Contains("slime")) return i + 1;
             }
 
             var joined = string.Empty;

@@ -123,7 +123,7 @@ namespace BetterFG.Patches
             if (published != null)
             {
                 BetterFG.Tweaks.ImmediateRespawnTweak.SuppressWhile(published);
-                BetterFG.Features.CopyCode.CopyCodePrompt.OnPublishSuccess(published);
+                BetterFG.Features.CreativeExpansion.CopyCodePrompt.OnPublishSuccess(published);
                 ApplyCreativeNow(published.transform, null, false);
                 return;
             }

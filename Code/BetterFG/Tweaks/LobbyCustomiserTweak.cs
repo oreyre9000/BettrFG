@@ -50,10 +50,22 @@ namespace BetterFG.Tweaks
                 inst.StartCoroutine(inst.Open().WrapToIl2Cpp());
         }
 
-        public static bool PopupOpen =>
-            _showListUp ||
-            GameObject.Find(UiRootPath + "/" + ShowSelectSub) != null ||
-            GameObject.Find(UiRootPath + "/" + PlayerListSub) != null;
+        private static int _popupFrame = -1;
+        private static bool _popupOpen;
+
+        public static bool PopupOpen
+        {
+            get
+            {
+                if (_showListUp) return true;
+                int f = Time.frameCount;
+                if (f == _popupFrame) return _popupOpen;
+                _popupFrame = f;
+                _popupOpen = GameObject.Find(UiRootPath + "/" + ShowSelectSub) != null ||
+                             GameObject.Find(UiRootPath + "/" + PlayerListSub) != null;
+                return _popupOpen;
+            }
+        }
 
         const string UiRootPath = "UICanvas_Client_V2(Clone)/Default";
         const string LobbyCanvasSub = "Prime_UI_PrivateLobby_Canvas(Clone)";

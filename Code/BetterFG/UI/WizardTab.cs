@@ -1,4 +1,5 @@
 using System;
+using BetterFG.Services;
 using UnityEngine;
 using UnityEngine.UI;
 using BettrFG.uGUI;
@@ -170,7 +171,7 @@ namespace BetterFG.UI
             for (int i = 0; i < _panels.Length; i++) _panels[i].SetActive(i == Step);
 
             var titles = StepTitles;
-            _stepHeader.text = $"Step {Step + 1} of {titles.Length}  -  {titles[Step]}";
+            _stepHeader.text = $"Step {Step + 1} of {titles.Length}  -  {LocalizationService.Get(titles[Step])}";
 
             bool last = Step == titles.Length - 1;
             var nlbl = _nextBtn.GetComponentInChildren<Text>();

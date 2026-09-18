@@ -75,6 +75,7 @@ namespace BetterFG.UI
         // ──────────────────────────────────────────────────────────────────────
         public static BetterFGStartupWindow Show()
         {
+            if (BetterFG.Utilities.FeatureAvailability.Off(nameof(BetterFGStartupWindow))) return null;
             if (SettingsService.Get(KEY_SEEN) == "true") return null;
             SettingsService.Set(KEY_SEEN, "true");
 

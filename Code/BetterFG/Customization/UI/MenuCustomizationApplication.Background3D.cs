@@ -148,7 +148,7 @@ namespace BetterFG.Customization.UI
                     var live = FindMenuBackgroundVm();
                     if (live == null) return;
 
-                    var def = BetterFG.Features.CustomBackgrounds.Definers.ByBundle(bundle);
+                    var def = BetterFG.Features.CreativeExpansion.Definers.ByBundle(bundle);
                     string wantId = def.HasValue ? MenuBaseForDefiner(def.Value) : NativeIdForBundle(bundle);
 
                     RequestBaseSkybox(wantId);
@@ -256,7 +256,7 @@ namespace BetterFG.Customization.UI
             if (SettingsService.Get(KEY_BG3D_MODE, "native") == "custom")
             {
                 if (_customBg3d == null) return;
-                var definer = BetterFG.Features.CustomBackgrounds.Definers.ByBundle(_customBg3d.name);
+                var definer = BetterFG.Features.CreativeExpansion.Definers.ByBundle(_customBg3d.name);
                 string wantId = definer.HasValue ? MenuBaseForDefiner(definer.Value) : NativeIdForBundle(_customBg3d.name);
                 if (wantId != null) skyboxId = wantId;
                 return;
@@ -291,7 +291,7 @@ namespace BetterFG.Customization.UI
 
             if (_customBg3d != null && SettingsService.Get(KEY_BG3D_MODE, "native") == "custom")
             {
-                var definer = BetterFG.Features.CustomBackgrounds.Definers.ByBundle(_customBg3d.name);
+                var definer = BetterFG.Features.CreativeExpansion.Definers.ByBundle(_customBg3d.name);
                 string wantId = definer.HasValue ? MenuBaseForDefiner(definer.Value) : NativeIdForBundle(_customBg3d.name);
                 var bg = root != null ? root : GameObject.Find(wantId + "(Clone)");
 
@@ -319,7 +319,7 @@ namespace BetterFG.Customization.UI
             Instance?.ApplyMenuBackground3DFromSettings();
         }
 
-        private static string MenuBaseForDefiner(BetterFG.Features.CustomBackgrounds.Definers.Entry e)
+        private static string MenuBaseForDefiner(BetterFG.Features.CreativeExpansion.Definers.Entry e)
         {
             if (!string.IsNullOrEmpty(e.BaseLabel))
                 foreach (var entry in Bg3dCatalog)
@@ -373,7 +373,7 @@ namespace BetterFG.Customization.UI
             RenderSettings.ambientMode = _bg3dPrevAmbientMode;
         }
 
-        private static void ApplyDefinerOverrides(BetterFG.Features.CustomBackgrounds.Definers.Entry e, Material skyboxMat)
+        private static void ApplyDefinerOverrides(BetterFG.Features.CreativeExpansion.Definers.Entry e, Material skyboxMat)
         {
             if (skyboxMat != null) RenderSettings.skybox = skyboxMat;
             if (!e.HideLighting) return;
@@ -406,7 +406,7 @@ namespace BetterFG.Customization.UI
                     if (gen != _bg3dGen) yield break;
                 }
 
-                var definer = BetterFG.Features.CustomBackgrounds.Definers.ByBundle(bundle);
+                var definer = BetterFG.Features.CreativeExpansion.Definers.ByBundle(bundle);
 
                 string prefabPath = null, skyboxPath = null;
                 foreach (var name in ab.GetAllAssetNames())
@@ -472,7 +472,7 @@ namespace BetterFG.Customization.UI
                 else if (bundle.StartsWith("terrain_beta"))
                 {
                     _customBg3d.transform.localPosition = bundle == "terrain_beta_night"
-                        ? BetterFG.Features.CustomBackgrounds.Definers.NightTerrainSpawn
+                        ? BetterFG.Features.CreativeExpansion.Definers.NightTerrainSpawn
                         : new Vector3(-7.4413f, 135.4576f, 108.0769f);
                     _customBg3d.transform.Find("Plane").gameObject.SetActive(false);
                 }

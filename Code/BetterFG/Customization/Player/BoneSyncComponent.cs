@@ -1,6 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using System;
+using BepInEx.Unity.IL2CPP.Utils.Collections;
+using HarmonyLib;
+using FG.Common.Character;
+using FallGuysIK;
 
 namespace BetterFG.Customization.Player
 {
@@ -8,10 +13,6 @@ namespace BetterFG.Customization.Player
     {
         public GameObject playerObject;
         public bool isRemote = false;
-        public List<BoneOffsetEntry> boneOffsets = new List<BoneOffsetEntry>();
-
-        private Dictionary<string, Vector3> boneOffsetMap = new Dictionary<string, Vector3>(StringComparer.Ordinal);
-        private HashSet<string> loggedAppliedBones = new HashSet<string>();
 
         private Transform playerRoot;
         private Transform customSkinRoot;
@@ -25,14 +26,84 @@ namespace BetterFG.Customization.Player
         private int _tick;
 
         private Dictionary<string, Transform> _playerBonesByName = new Dictionary<string, Transform>(StringComparer.Ordinal);
-        private Transform _playerTorsoBone;
-        private Transform _customTorsoBone;
+
+        private struct RealBoneOffset { public Transform bone; public Vector3 localPosition; }
+        private RealBoneOffset[] _realOffsets = Array.Empty<RealBoneOffset>();
+        private Vector3[] _savedLocal = Array.Empty<Vector3>();
+        private bool _offsetsLive;
+        private bool _restoreRunning;
+
+        internal const string GateKey = "bfg.bonesync.ragdoll";
+        private static readonly Dictionary<IntPtr, BoneSyncComponent> _byRagdoll = new Dictionary<IntPtr, BoneSyncComponent>();
+        private static readonly Dictionary<IntPtr, List<BoneSyncComponent>> _byBean = new Dictionary<IntPtr, List<BoneSyncComponent>>();
+        private IntPtr _beanKey = IntPtr.Zero;
+        private IntPtr _ragdollKey = IntPtr.Zero;
 
         void Start()
         {
             _phase = GetInstanceID() & 3;
-            RebuildOffsetMap();
             SetupBoneReferences();
+        }
+
+        public void DriveRealBonesFromOffsets(List<BoneOffsetEntry> offsets)
+        {
+            if (_playerBonesByName.Count == 0) SetupBoneReferences();
+
+            var list = new List<RealBoneOffset>();
+            foreach (var entry in offsets)
+            {
+                if (string.IsNullOrEmpty(entry.bone)) continue;
+                string key = entry.bone.Trim();
+                if (!_playerBonesByName.TryGetValue(key, out var real) || real == null || real == playerRoot) continue;
+                list.Add(new RealBoneOffset { bone = real, localPosition = entry.localPosition });
+            }
+
+            _realOffsets = list.ToArray();
+            _savedLocal = new Vector3[_realOffsets.Length];
+            _pairs = Array.Empty<BonePair>();
+            enabled = _realOffsets.Length > 0;
+
+            if (_realOffsets.Length > 0 && !_restoreRunning)
+            {
+                _restoreRunning = true;
+                StartCoroutine(RestoreAfterRender().WrapToIl2Cpp());
+            }
+            Plugin.Log.LogInfo($"BoneSync: driving {_realOffsets.Length} skeleton bone positions from the skin's rig on {playerObject.name}, restored after render so physics never sees them");
+        }
+
+        private void ApplyRealOffsets()
+        {
+            if (_savedLocal.Length != _realOffsets.Length) _savedLocal = new Vector3[_realOffsets.Length];
+            for (int i = 0; i < _realOffsets.Length; i++)
+            {
+                var b = _realOffsets[i].bone;
+                if (b is null || b.m_CachedPtr == IntPtr.Zero) continue;
+                if (!_offsetsLive) _savedLocal[i] = b.localPosition;
+                b.localPosition = _realOffsets[i].localPosition;
+            }
+            _offsetsLive = true;
+        }
+
+        private void RestoreRealBones()
+        {
+            if (!_offsetsLive) return;
+            _offsetsLive = false;
+            for (int i = 0; i < _realOffsets.Length; i++)
+            {
+                var b = _realOffsets[i].bone;
+                if (b is null || b.m_CachedPtr == IntPtr.Zero) continue;
+                b.localPosition = _savedLocal[i];
+            }
+        }
+
+        private IEnumerator RestoreAfterRender()
+        {
+            var endOfFrame = new WaitForEndOfFrame();
+            while (true)
+            {
+                yield return endOfFrame;
+                RestoreRealBones();
+            }
         }
 
         public void Rebind()
@@ -41,14 +112,6 @@ namespace BetterFG.Customization.Player
             _activeRig = -1;
             _playerBonesByName = new Dictionary<string, Transform>(StringComparer.Ordinal);
             SetupBoneReferences();
-        }
-
-        public void SetBoneOffsets(List<BoneOffsetEntry> offsets)
-        {
-            boneOffsets = offsets ?? new List<BoneOffsetEntry>();
-            RebuildOffsetMap();
-            RebuildCachedBones();
-            Plugin.Log.LogInfo($"BoneSync: {boneOffsetMap.Count} offsets registered on '{name}'");
         }
 
         public void SyncNow()
@@ -60,33 +123,17 @@ namespace BetterFG.Customization.Player
                 if (custom is null || custom.m_CachedPtr == IntPtr.Zero) continue;
                 if (driver is null || driver.m_CachedPtr == IntPtr.Zero) continue;
 
-                driver.GetPositionAndRotation(out var pos, out var rot);
-                if (_pairs[i].hasOffset)
+                if (_pairs[i].trackPosition)
                 {
-                    custom.rotation = rot;
-                    custom.localPosition = _pairs[i].offset;
+                    driver.GetPositionAndRotation(out var pos, out var rot);
+                    custom.SetPositionAndRotation(pos, rot);
                 }
                 else
-                    custom.SetPositionAndRotation(pos, rot);
-            }
-
-            ForceScaledTorsoLocalPos();
-        }
-
-        private void RebuildOffsetMap()
-        {
-            boneOffsetMap.Clear();
-            loggedAppliedBones.Clear();
-            if (boneOffsets == null) return;
-            foreach (var entry in boneOffsets)
-            {
-                if (string.IsNullOrEmpty(entry.bone)) continue;
-                string key = entry.bone.Trim();
-                if (!boneOffsetMap.ContainsKey(key))
-                    boneOffsetMap[key] = entry.localPosition;
-                string lower = key.ToLowerInvariant();
-                if (!boneOffsetMap.ContainsKey(lower))
-                    boneOffsetMap[lower] = entry.localPosition;
+                {
+                    var fkCustom = _pairs[i].customParent.TransformPoint(_pairs[i].customRestLocal);
+                    var fkDriver = _pairs[i].driverParent.TransformPoint(_pairs[i].driverRestLocal);
+                    custom.SetPositionAndRotation(fkCustom + (driver.position - fkDriver), driver.rotation);
+                }
             }
         }
 
@@ -106,6 +153,12 @@ namespace BetterFG.Customization.Player
                 return;
             }
 
+            if (_realOffsets.Length > 0)
+            {
+                ApplyRealOffsets();
+                return;
+            }
+
             SwitchToLiveRig();
             SyncNow();
         }
@@ -120,16 +173,29 @@ namespace BetterFG.Customization.Player
                 if (!(cur.rootGo is null) && cur.rootGo.m_CachedPtr != IntPtr.Zero && cur.rootGo.activeInHierarchy) return;
             }
 
+            int live = PickBodyRig();
+            if (live < 0 || live == _activeRig) return;
+
+            UseRig(live);
+            Plugin.Log.LogInfo($"bone sync hopped to {_rigs[live].label} on {playerObject.name}, {cachedBones.Count} bones matched");
+        }
+
+        private int PickBodyRig()
+        {
             for (int i = 0; i < _rigs.Count; i++)
             {
                 var rig = _rigs[i];
                 if (rig.rootGo is null || rig.rootGo.m_CachedPtr == IntPtr.Zero || !rig.rootGo.activeInHierarchy) continue;
-                if (i == _activeRig) return;
-
-                UseRig(i);
-                Plugin.Log.LogInfo($"bone sync hopped to {rig.label} on {playerObject.name}, {cachedBones.Count} bones matched");
-                return;
+                if (rig.label.IndexOf("Body_LOD", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                return i;
             }
+            for (int i = 0; i < _rigs.Count; i++)
+            {
+                var rig = _rigs[i];
+                if (rig.rootGo is null || rig.rootGo.m_CachedPtr == IntPtr.Zero || !rig.rootGo.activeInHierarchy) continue;
+                return i;
+            }
+            return -1;
         }
 
         private void UseRig(int index)
@@ -138,7 +204,6 @@ namespace BetterFG.Customization.Player
             var rig = _rigs[index];
             _playerBonesByName = rig.bones;
             playerRoot = rig.root;
-            _playerTorsoBone = rig.torso;
             _stride = rig.stride;
             RebuildCachedBones();
         }
@@ -177,9 +242,6 @@ namespace BetterFG.Customization.Player
                     if (!map.ContainsKey(lowerAlias)) map[lowerAlias] = root;
                 }
 
-                if (!map.TryGetValue("Torso_C_jnt_NoStrechSquash", out var torso))
-                    torso = FindBoneDeep(root, "Torso_C_jnt_NoStrechSquash");
-
                 string label = skinned.name;
                 int lod = 0;
                 int at = label.IndexOf("LOD", StringComparison.Ordinal);
@@ -191,7 +253,6 @@ namespace BetterFG.Customization.Player
                     label = label,
                     root = root,
                     rootGo = root.gameObject,
-                    torso = torso,
                     bones = map,
                     stride = lod < 2 ? 1 : (lod > 4 ? 4 : lod)
                 });
@@ -208,20 +269,90 @@ namespace BetterFG.Customization.Player
                 }
             }
 
-            _customTorsoBone = FindBoneDeep(transform, "Torso_C_jnt_NoStrechSquash");
-
             if (_rigs.Count > 0)
             {
-                int live = 0;
-                for (int i = 0; i < _rigs.Count; i++)
-                    if (_rigs[i].rootGo.activeInHierarchy) { live = i; break; }
-                UseRig(live);
+                int live = PickBodyRig();
+                if (live >= 0) UseRig(live);
             }
 
             if (playerRoot == null || customSkinRoot == null)
                 Plugin.Log.LogWarning($"BoneSync: setup failed on {playerObject.name} - playerRoot={(playerRoot != null ? playerRoot.name : "null")} customRoot={(customSkinRoot != null ? customSkinRoot.name : "null")}");
             else
                 Plugin.Log.LogInfo($"BoneSync: ready on {playerObject.name} - {_rigs.Count} skeletons found, riding '{_rigs[_activeRig].label}' with {_playerBonesByName.Count} bones, cached={cachedBones.Count}");
+
+            RegisterRagdoll();
+            RegisterBean();
+        }
+
+        private void RegisterBean()
+        {
+            UnregisterBean();
+            if (playerObject is null || playerObject.m_CachedPtr == IntPtr.Zero) return;
+            _beanKey = playerObject.m_CachedPtr;
+            if (!_byBean.TryGetValue(_beanKey, out var list)) { list = new List<BoneSyncComponent>(); _byBean[_beanKey] = list; }
+            if (!list.Contains(this)) list.Add(this);
+        }
+
+        private void UnregisterBean()
+        {
+            if (_beanKey == IntPtr.Zero) return;
+            if (_byBean.TryGetValue(_beanKey, out var list))
+            {
+                list.Remove(this);
+                if (list.Count == 0) _byBean.Remove(_beanKey);
+            }
+            _beanKey = IntPtr.Zero;
+        }
+
+        internal static void AfterIkPose(FallGuyIkController ik)
+        {
+            if (ik is null || ik.m_CachedPtr == IntPtr.Zero) return;
+            var character = ik.transform;
+            var bean = character != null ? character.parent : null;
+            if (bean is null || bean.m_CachedPtr == IntPtr.Zero) return;
+            if (!_byBean.TryGetValue(bean.gameObject.m_CachedPtr, out var list)) return;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var sync = list[i];
+                if (sync is null || sync.m_CachedPtr == IntPtr.Zero || !sync.enabled) continue;
+                if (sync._realOffsets.Length > 0) sync.ApplyRealOffsets();
+                else sync.SyncNow();
+            }
+        }
+
+        private void RegisterRagdoll()
+        {
+            UnregisterRagdoll();
+            var ragdoll = playerObject != null ? playerObject.GetComponentInChildren<RagdollController>(true) : null;
+            if (ragdoll == null) return;
+            _ragdollKey = ragdoll.m_CachedPtr;
+            _byRagdoll[_ragdollKey] = this;
+            SyncGate();
+        }
+
+        private void UnregisterRagdoll()
+        {
+            if (_ragdollKey == IntPtr.Zero) return;
+            _byRagdoll.Remove(_ragdollKey);
+            _ragdollKey = IntPtr.Zero;
+            SyncGate();
+        }
+
+        private static void SyncGate() => Utilities.PatchGate.Request(GateKey, "bone offsets", _byRagdoll.Count > 0);
+
+        void OnDestroy()
+        {
+            RestoreRealBones();
+            UnregisterRagdoll();
+            UnregisterBean();
+        }
+
+        internal static void AfterRagdollPose(RagdollController controller)
+        {
+            if (!_byRagdoll.TryGetValue(controller.m_CachedPtr, out var sync) || sync is null || sync.m_CachedPtr == IntPtr.Zero) return;
+            if (sync._realOffsets.Length > 0) sync.ApplyRealOffsets();
+            else sync.SyncNow();
         }
 
         private void RebuildCachedBones()
@@ -238,37 +369,27 @@ namespace BetterFG.Customization.Player
             Transform playerBone = null;
             if (!_playerBonesByName.TryGetValue(customBone.name, out playerBone) || playerBone == null)
                 _playerBonesByName.TryGetValue(customBone.name.ToLowerInvariant(), out playerBone);
+            if (playerBone == null && playerRoot != null)
+                playerBone = FindBoneDeep(playerRoot, customBone.name);
 
             if (playerBone != null)
             {
-                bool hasOffset = boneOffsetMap.TryGetValue(customBone.name, out Vector3 offset)
-                              || boneOffsetMap.TryGetValue(customBone.name.Trim().ToLowerInvariant(), out offset);
-
-                cachedBones.Add(new BonePair
-                {
-                    customBone = customBone,
-                    playerBone = playerBone,
-                    hasOffset = hasOffset,
-                    offset = offset
-                });
-
-                if (hasOffset && !loggedAppliedBones.Contains(customBone.name))
-                {
-                    loggedAppliedBones.Add(customBone.name);
-                    Plugin.Log.LogInfo($"BoneSync: offset on '{customBone.name}': ({offset.x:F3}, {offset.y:F3}, {offset.z:F3})");
-                }
+                bool rootLike = customBone == customSkinRoot || customBone.parent == customSkinRoot;
+                if (rootLike || (customBone.parent != null && playerBone.parent != null))
+                    cachedBones.Add(new BonePair
+                    {
+                        customBone = customBone,
+                        playerBone = playerBone,
+                        trackPosition = rootLike,
+                        customParent = customBone.parent,
+                        driverParent = playerBone.parent,
+                        customRestLocal = customBone.localPosition,
+                        driverRestLocal = playerBone.localPosition
+                    });
             }
 
             for (int i = 0; i < customBone.childCount; i++)
                 CollectCachedBones(customBone.GetChild(i));
-        }
-
-        private void ForceScaledTorsoLocalPos()
-        {
-            if (_playerTorsoBone is null || _playerTorsoBone.m_CachedPtr == IntPtr.Zero) return;
-            if (_customTorsoBone is null || _customTorsoBone.m_CachedPtr == IntPtr.Zero) return;
-            _playerTorsoBone.GetLocalPositionAndRotation(out var lp, out _);
-            _customTorsoBone.localPosition = lp * 0.01f;
         }
 
         private static Transform FindBoneDeep(Transform root, string boneName)
@@ -288,7 +409,6 @@ namespace BetterFG.Customization.Player
             public string label;
             public Transform root;
             public GameObject rootGo;
-            public Transform torso;
             public Dictionary<string, Transform> bones;
             public int stride;
         }
@@ -297,8 +417,28 @@ namespace BetterFG.Customization.Player
         {
             public Transform customBone;
             public Transform playerBone;
-            public bool hasOffset;
-            public Vector3 offset;
+            public bool trackPosition;
+            public Transform customParent;
+            public Transform driverParent;
+            public Vector3 customRestLocal;
+            public Vector3 driverRestLocal;
         }
     }
+
+    [Utilities.BfgPatchGate(BoneSyncComponent.GateKey)]
+    [HarmonyPatch(typeof(FallGuyIkController), "LateUpdate")]
+    internal static class BoneSyncAfterIkPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(FallGuyIkController __instance) => BoneSyncComponent.AfterIkPose(__instance);
+    }
+
+    [Utilities.BfgPatchGate(BoneSyncComponent.GateKey)]
+    [HarmonyPatch(typeof(RagdollController), "UpdateJoints")]
+    internal static class BoneSyncAfterRagdollPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RagdollController __instance) => BoneSyncComponent.AfterRagdollPose(__instance);
+    }
+
 }

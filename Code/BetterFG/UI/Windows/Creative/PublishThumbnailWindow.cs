@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
-using BetterFG.Features.CreativeThumbnail;
+using BetterFG.Features.CreativeExpansion;
 using BetterFG.Features.Replay;
 using BetterFG.Features.UnityRound.Editor;
 using BetterFG.Services;

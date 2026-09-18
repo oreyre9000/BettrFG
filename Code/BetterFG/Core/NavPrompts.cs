@@ -245,6 +245,7 @@ namespace BetterFG.Core
             for (int i = 0; i < n; i++)
             {
                 var j = sticks[i];
+                if (j == null || !j.GetAnyButtonDown()) continue;
                 _sharedAemBuf.Clear();
                 int got = p.controllers.maps.GetButtonMapsWithAction(j, actionId, false, _sharedAemBuf);
                 int layout = -1;
@@ -271,7 +272,7 @@ namespace BetterFG.Core
 
             if (joystickOnly) return false;
             var kb = p.controllers.Keyboard;
-            if (kb == null) return false;
+            if (kb == null || !kb.GetAnyButtonDown()) return false;
             _sharedAemBuf.Clear();
             int kgot = p.controllers.maps.GetButtonMapsWithAction(kb, actionId, false, _sharedAemBuf);
             int kbLayout = -1;
@@ -361,11 +362,62 @@ namespace BetterFG.Core
             for (int i = 0; i < p.controllers.joystickCount; i++)
             {
                 var j = sticks[i];
-                if (j == null) continue;
+                if (j == null || !j.GetAnyButtonDown()) continue;
                 int id = ResolveElementIdByName(j, names);
                 if (id >= 0 && j.GetButtonDownById(id)) return true;
             }
             return false;
+        }
+
+        internal static bool ElementHeldByName(params string[] names)
+        {
+            if (!ReInput.isReady || ReInput.players.playerCount == 0) return false;
+            var p = ReInput.players.GetPlayer(0);
+            var sticks = p.controllers.Joysticks;
+            for (int i = 0; i < p.controllers.joystickCount; i++)
+            {
+                var j = sticks[i];
+                if (j == null) continue;
+                int id = ResolveElementIdByName(j, names);
+                if (id >= 0 && j.GetButtonById(id)) return true;
+            }
+            return false;
+        }
+
+        internal static int ResolveAxisIdByName(Joystick j, params string[] names)
+        {
+            if (j == null) return -1;
+            var ids = j.AxisElementIdentifiers;
+            int n = j.axisCount;
+            foreach (var name in names)
+                for (int a = 0; a < n; a++)
+                {
+                    var id = ids[a];
+                    if (id != null && id.name == name) return id.id;
+                }
+            return -1;
+        }
+
+        // rewired reports a stick axis in its own orientation per hardware layout, and GetAxisById
+        // already applies the layout's calibration/invert — so this is the only read that agrees
+        // across pads. raw GetAxis(index) does not.
+        internal static float AxisByName(params string[] names)
+        {
+            if (!ReInput.isReady || ReInput.players.playerCount == 0) return 0f;
+            var p = ReInput.players.GetPlayer(0);
+            var sticks = p.controllers.Joysticks;
+            for (int i = 0; i < p.controllers.joystickCount; i++)
+            {
+                var j = sticks[i];
+                if (j == null) continue;
+                int id = ResolveAxisIdByName(j, names);
+                if (id >= 0)
+                {
+                    float v = j.GetAxisById(id);
+                    if (Mathf.Abs(v) > 0.001f) return v;
+                }
+            }
+            return 0f;
         }
 
         private static void ApplyGlyph(NavigationPromptButton btn, Sprite kbSprite, Sprite padSprite)
@@ -497,8 +549,16 @@ namespace BetterFG.Core
         internal KeyCode ExtraKey = KeyCode.None; // also fires on this key (read via the Rewired keyboard)
         internal bool UseOwnGlyph;              // swap the button's glyph for BettrFG's own key/pad pair
         internal bool JoystickPollOnly;         // PollActions: only the joystick element walk, not keyboard/any-device
+        internal BfgBind Bound;
 
         internal NavPromptBuilder(NavPrompt source) { Source = source; }
+
+        public NavPromptBuilder Bind(BfgBind bind)
+        {
+            Bound = bind;
+            PollActionIdOverride = new[] { bind.ActionId };
+            return this;
+        }
 
         // labelKey doubles as both the CMS dictionary key (must be unique per text) and the cache key.
         // If you reuse a key, you reuse the cloned data — fine for the same label, surprising otherwise.
@@ -596,6 +656,12 @@ namespace BetterFG.Core
 
             var data = NavPromptCore.GetOrCloneData(Source, LabelKey, LabelText);
             if (data == null) return null;
+            if (Bound != null)
+            {
+                data.IconAction = Bound.ActionId;
+                data.IconCategory = RewiredConsts.Category.Default;
+                data.InputActions = new Il2CppStructArray<int>(0);
+            }
 
             var prefab = NavPromptCore.GetPromptPrefab();
             if (prefab == null) return null;
@@ -870,6 +936,7 @@ namespace BetterFG.Core
         public const NavPrompt PasteCode = (NavPrompt)202;
         public const NavPrompt RandomShow = (NavPrompt)203;
         public const NavPrompt IntroCamExit = (NavPrompt)204;
+        public const NavPrompt EmoticonManage = (NavPrompt)205;
 
         private sealed class Entry
         {

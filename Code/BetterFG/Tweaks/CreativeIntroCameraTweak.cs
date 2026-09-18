@@ -178,7 +178,7 @@ namespace BetterFG.Tweaks
             _phase = ((h >> 3) & 255u) / 255f * Mathf.PI;
             _angle = ((h >> 1) & 1023u) / 1024f * Mathf.PI * 2f;
 
-            if (BetterFG.Features.CustomIntroCams.CustomIntroCams.TryBuildPath(out var authored, out var authoredLook, out float authoredDuration))
+            if (BetterFG.Features.CreativeExpansion.CustomIntroCams.TryBuildPath(out var authored, out var authoredLook, out float authoredDuration))
             {
                 _path = authored;
                 _lookPath = authoredLook;

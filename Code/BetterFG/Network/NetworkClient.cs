@@ -196,9 +196,11 @@ namespace BetterFG.Network
             if (fgcc == null) yield break;
 
             float elapsed = 0f;
+            float wait = 0.1f;
             while (elapsed < 5f)
             {
                 var huds = UnityEngine.Object.FindObjectsOfType<PlayerInfoHUDBase>(true);
+                wait = huds == null || huds.Length == 0 ? 1f : 0.1f;
                 if (huds != null)
                 {
                     bool found = false;
@@ -217,8 +219,8 @@ namespace BetterFG.Network
                         if (found) yield break;
                     }
                 }
-                yield return new WaitForSeconds(0.1f);
-                elapsed += 0.1f;
+                yield return new WaitForSeconds(wait);
+                elapsed += wait;
             }
             Plugin.Log.LogWarning($"NetworkClient: timed out for '{bean.name}'");
         }

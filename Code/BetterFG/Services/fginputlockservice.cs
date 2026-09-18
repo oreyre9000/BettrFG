@@ -73,6 +73,7 @@ namespace BetterFG.Services
         // locks the whole game input while our UI is up in the level editor — even when not
         // typing in a field — so editor hotkeys / movement don't fire under the open overlay.
         public static void SetEditorUiLock(bool locked) => _editorUiLock = locked;
+        public static bool EditorUiLocked => _editorUiLock;
 
         // held while one of our fullscreen screens (bean creator, assets, replay) owns the display.
         // the game underneath is still alive and still listening, so without this its menu navigates

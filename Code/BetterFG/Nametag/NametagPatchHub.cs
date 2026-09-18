@@ -448,30 +448,68 @@ namespace BetterFG.Nametag
 
             if (!hide && string.IsNullOrEmpty(customSprite)) return;
 
-            BeanMonitorService.Instance?.StartCoroutine(PollAndApplyPlatformIcon(vm, info).WrapToIl2Cpp());
+            QueuePlatformIcon(vm, info);
         }
 
-        private static IEnumerator PollAndApplyPlatformIcon(NameTagViewModel vm, RemoteNametagInfo info)
+        private sealed class IconPoll
         {
-            float elapsed = 0f;
-            while (elapsed < 5f)
+            public NameTagViewModel Vm;
+            public RemoteNametagInfo Info;
+            public float Deadline;
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<System.IntPtr, IconPoll> _iconPolls
+            = new System.Collections.Generic.Dictionary<System.IntPtr, IconPoll>();
+        private static readonly System.Collections.Generic.List<System.IntPtr> _iconDone
+            = new System.Collections.Generic.List<System.IntPtr>();
+        private static bool _iconPolling;
+
+        private static void QueuePlatformIcon(NameTagViewModel vm, RemoteNametagInfo info)
+        {
+            if (_iconPolls.TryGetValue(vm.Pointer, out var running)) { running.Info = info; return; }
+
+            _iconPolls[vm.Pointer] = new IconPoll { Vm = vm, Info = info, Deadline = Time.unscaledTime + 5f };
+            if (_iconPolling) return;
+
+            _iconPolling = true;
+            BeanMonitorService.Instance?.StartCoroutine(PollPlatformIcons().WrapToIl2Cpp());
+        }
+
+        private static IEnumerator PollPlatformIcons()
+        {
+            float wait = 0.1f;
+
+            while (_iconPolls.Count > 0)
             {
-                if (TryApplyPlatformIcon(vm, info))
-                    yield break;
+                yield return new WaitForSeconds(wait);
 
-                yield return new WaitForSeconds(0.1f);
-                elapsed += 0.1f;
+                var huds = Object.FindObjectsOfType<PlayerInfoHUDBase>(true);
+                wait = huds == null || huds.Length == 0 ? 1f : 0.1f;
+                _iconDone.Clear();
+
+                foreach (var kv in _iconPolls)
+                {
+                    var poll = kv.Value;
+
+                    if (poll.Vm == null || TryApplyPlatformIcon(huds, poll.Vm, poll.Info)) { _iconDone.Add(kv.Key); continue; }
+                    if (Time.unscaledTime < poll.Deadline) continue;
+
+                    Plugin.Log.LogWarning($"gave up on {poll.Vm._playerName}'s platform icon, no HUD row ever showed up");
+                    _iconDone.Add(kv.Key);
+                }
+
+                for (int i = 0; i < _iconDone.Count; i++) _iconPolls.Remove(_iconDone[i]);
             }
-            Plugin.Log.LogWarning($"NametagPatchHub: timed out waiting for HUD row for '{vm._playerName}'");
+            _iconPolling = false;
         }
 
-        private static bool TryApplyPlatformIcon(NameTagViewModel vm, RemoteNametagInfo info)
+        private static bool TryApplyPlatformIcon(Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppArrayBase<PlayerInfoHUDBase> huds,
+            NameTagViewModel vm, RemoteNametagInfo info)
         {
+            if (huds == null) return false;
+
             bool hide = info.platformHide == "true";
             string customSprite = info.platformCustom ?? "";
-
-            var huds = Object.FindObjectsOfType<PlayerInfoHUDBase>(true);
-            if (huds == null) return false;
 
             for (int h = 0; h < huds.Length; h++)
             {

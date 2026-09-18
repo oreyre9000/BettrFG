@@ -22,6 +22,9 @@ namespace BettrFG.uGUI
         public Color RightMid = new Color(0f, 1f, 0.1f, 0.18f);
         public Color Right = new Color(0f, 1f, 0.1f, 0f);
 
+        public float LeftMidT = 0.33f;
+        public float RightMidT = 0.66f;
+
         public Color TopColor = Color.white;
         public Color BottomColor = Color.black;
 
@@ -52,6 +55,34 @@ namespace BettrFG.uGUI
                     vh.SetUIVertex(vert, i);
                 }
             }
+            else if (count == 4)
+            {
+                var bl = new UIVertex(); var tl = new UIVertex(); var tr = new UIVertex(); var br = new UIVertex();
+                vh.PopulateUIVertex(ref bl, 0);
+                vh.PopulateUIVertex(ref tl, 1);
+                vh.PopulateUIVertex(ref tr, 2);
+                vh.PopulateUIVertex(ref br, 3);
+                vh.Clear();
+                float[] stops = { 0f, LeftMidT, RightMidT, 1f };
+                for (int s = 0; s < 4; s++)
+                {
+                    float t = stops[s];
+                    var bot = bl; var top = tl;
+                    bot.position = Vector3.Lerp(bl.position, br.position, t);
+                    top.position = Vector3.Lerp(tl.position, tr.position, t);
+                    bot.uv0 = Vector4.Lerp(bl.uv0, br.uv0, t);
+                    top.uv0 = Vector4.Lerp(tl.uv0, tr.uv0, t);
+                    bot.color = top.color = SampleHorizontal(t);
+                    vh.AddVert(bot);
+                    vh.AddVert(top);
+                }
+                for (int s = 0; s < 3; s++)
+                {
+                    int b0 = s * 2, t0 = b0 + 1, b1 = b0 + 2, t1 = b0 + 3;
+                    vh.AddTriangle(b0, t0, t1);
+                    vh.AddTriangle(t1, b1, b0);
+                }
+            }
             else
             {
                 float minX = float.MaxValue, maxX = float.MinValue;
@@ -77,9 +108,9 @@ namespace BettrFG.uGUI
         {
             if (t <= 0f) return Left;
             if (t >= 1f) return Right;
-            if (t < 0.33f) return Color.Lerp(Left, LeftMid, t / 0.33f);
-            if (t < 0.66f) return Color.Lerp(LeftMid, RightMid, (t - 0.33f) / 0.33f);
-            return Color.Lerp(RightMid, Right, (t - 0.66f) / 0.34f);
+            if (t < LeftMidT) return Color.Lerp(Left, LeftMid, t / LeftMidT);
+            if (t < RightMidT) return Color.Lerp(LeftMid, RightMid, (t - LeftMidT) / (RightMidT - LeftMidT));
+            return Color.Lerp(RightMid, Right, (t - RightMidT) / (1f - RightMidT));
         }
     }
 }

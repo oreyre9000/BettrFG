@@ -327,7 +327,7 @@ namespace BetterFG.UI.Tabs
                     markRt.anchorMax = new Vector2(0f, 0.5f);
                     markRt.pivot = new Vector2(0f, 0.5f);
                     markRt.sizeDelta = new Vector2(RepoStripH, RepoStripH);
-                    markRt.anchoredPosition = new Vector2(14f + lbl.preferredWidth + 3f, 0f);
+                    markRt.anchoredPosition = new Vector2(14f + UGUIShip.PreferredWidth(lbl) + 3f, 0f);
                     BetterFGUIMan.MakeObjectTooltip(markRt, "Applied from here: " + applied, 0.15f);
                 }
             }

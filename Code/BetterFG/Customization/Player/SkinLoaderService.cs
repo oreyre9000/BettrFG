@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -428,7 +428,7 @@ namespace BetterFG.Customization.Player
                 group = JsonUtil.GetValue(json, "group"),
                 type = JsonUtil.GetValue(json, "type"),
                 file = JsonUtil.GetValue(json, "file"),
-                skinScale = JsonUtil.GetFloat(json, "skinScale"),
+                skinScale = PlayerScaleService.ClampSkinScale(JsonUtil.GetFloat(json, "skinScale")),
                 keepBase = JsonUtil.GetBool(json, "keepBase")
             };
             return string.IsNullOrEmpty(skin.name) ? null : skin;

@@ -156,52 +156,6 @@ namespace BettrFG.uGUI
             return (rt, iRt);
         }
 
-        // a delux progress bar: a dark track under a delux-skinned fill (colorfill + shine) whose
-        // width is driven by SetDeluxBarProgress, all inside a panel-outline frame. returns the
-        // fill's RectTransform so the caller can drive it.
-        public static RectTransform CreateDeluxBar(Transform parent, Rect rect, Color fillColour)
-        {
-            var trackGo = new GameObject("DeluxBar");
-            trackGo.transform.SetParent(parent, false);
-            SetPixelRect(trackGo.AddComponent<RectTransform>(), rect);
-            var trackImg = trackGo.AddComponent<Image>();
-            ApplyDeluxBase(trackImg, 3f);
-            trackImg.color = new Color(0f, 0f, 0f, 0.55f);
-
-            var fillGo = new GameObject("Fill");
-            fillGo.transform.SetParent(trackGo.transform, false);
-            var fillRt = fillGo.AddComponent<RectTransform>();
-            fillRt.anchorMin = new Vector2(0f, 0f);
-            fillRt.anchorMax = new Vector2(0f, 1f);
-            fillRt.pivot = new Vector2(0f, 0.5f);
-            fillRt.offsetMin = new Vector2(2f, 2f);
-            fillRt.offsetMax = new Vector2(-2f, -2f);
-            ApplyDeluxSkin(fillGo, fillGo.AddComponent<Image>(), fillColour, true, 3f);
-
-            var outGo = new GameObject("Outline");
-            outGo.transform.SetParent(trackGo.transform, false);
-            var oRt = outGo.AddComponent<RectTransform>();
-            oRt.anchorMin = Vector2.zero;
-            oRt.anchorMax = Vector2.one;
-            oRt.offsetMin = oRt.offsetMax = Vector2.zero;
-            var oImg = outGo.AddComponent<Image>();
-            ApplyDeluxPanelOutline(oImg, 3f);
-            oImg.raycastTarget = false;
-
-            return fillRt;
-        }
-
-        // driven by the right anchor rather than a width: reading the track's size would mean casting
-        // fill.parent to RectTransform, and the offsets are re-applied because moving an anchor makes
-        // Unity recompute them off the retained sizeDelta.
-        public static void SetDeluxBarProgress(RectTransform fill, float t)
-        {
-            if (fill == null) return;
-            fill.anchorMax = new Vector2(Mathf.Clamp01(t), 1f);
-            fill.offsetMin = new Vector2(2f, 2f);
-            fill.offsetMax = new Vector2(-2f, -2f);
-        }
-
         // the delux look painted onto `img` + child layers on `go`: untinted black 9-slice base, a
         // `fill`-tinted colorfill slice, optional shine. returns the colorfill Image so interactive
         // callers (Button/Scrollbar) can point their targetGraphic at it and drive it via ColorTint.

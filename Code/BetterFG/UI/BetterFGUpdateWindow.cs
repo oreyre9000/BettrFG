@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using BetterFG.Core;
 using BetterFG.Services;
@@ -96,7 +96,7 @@ namespace BetterFG.UI
                 yield break;
             }
 
-            string current = BetterFGInfo.Version;
+            string current = MyPluginInfo.PLUGIN_VERSION;
             if (Norm(latest) == Norm(current))
                 yield break;
 

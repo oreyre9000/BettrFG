@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -139,27 +139,16 @@ namespace BetterFG.Customization.Player
                 yield break;
             }
 
-            bool localBindSkin = (IsLocalInRoundBean(bean) || GameObjectHelper.IsLobbyCharacter(bean) || GameObjectHelper.IsUICharacter(bean) || bean.name == "LevelEditor_FallGuy(Clone)") &&
-                                 (slot.skinInfo.boneOffsets == null || slot.skinInfo.boneOffsets.Count == 0);
-            if (localBindSkin)
-            {
-                var mainFg = clone.transform.Find("Main FG");
-                if (mainFg != null)
-                {
-                    var s = mainFg.localScale;
-                    float avg = (Mathf.Abs(s.x) + Mathf.Abs(s.y) + Mathf.Abs(s.z)) / 3f;
-                    localBindSkin = avg < 10f;
-                    Plugin.Log.LogInfo($"Main FG scale={s}, bind={(localBindSkin ? "yes" : "no")}");
-                }
-            }
-
             clone.transform.SetParent(beanGEO, true);
             clone.transform.localScale = Vector3.one;
+
+            var hiddenUntilBound = clone.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in hiddenUntilBound) if (r != null) r.enabled = false;
 
             if (GameObjectHelper.IsLobbyCharacter(bean)) clone.transform.localScale = Vector3.one;
             if (GameObjectHelper.IsUICharacter(bean) || GameObjectHelper.IsLobbyCharacter(bean))
                 GameObjectHelper.SetLayerRecursively(clone, LayerMask.NameToLayer("PlayerUI"));
-            yield return SetupBoneSyncCoroutine(clone, bean, slot.skinInfo, slot.bundle).WrapToIl2Cpp();
+            yield return SetupBoneSyncCoroutine(clone, bean).WrapToIl2Cpp();
 
             if (SlotDead(slot))
             {
@@ -169,11 +158,9 @@ namespace BetterFG.Customization.Player
                 yield break;
             }
 
-            var sync = clone.GetComponent<BoneSyncComponent>();
-            if (localBindSkin && (sync == null || sync.boneOffsets == null || sync.boneOffsets.Count == 0))
-                if (BindSkinToLocalFallguy(clone, bean, "Costume") && sync != null)
-                    sync.enabled = false;
-                SetRenderQueue(clone, 3000);
+            BindSkinToLocalFallguy(clone, bean, "Costume");
+            foreach (var r in hiddenUntilBound) if (r != null) r.enabled = true;
+            SetRenderQueue(clone, 3000);
 
             if (!slot.skinInfo.keepBase)
             {
@@ -225,29 +212,18 @@ namespace BetterFG.Customization.Player
 
             if (applyEx != null || clone == null) { Plugin.Log.LogError($"instantiate failed: {applyEx?.Message}"); pendingKeys.Remove(pendingKey); yield break; }
 
-            bool localBindSkin = (IsLocalInRoundBean(bean) || GameObjectHelper.IsLobbyCharacter(bean) || GameObjectHelper.IsUICharacter(bean) || bean.name == "LevelEditor_FallGuy(Clone)") &&
-                                 (slot.skinInfo.boneOffsets == null || slot.skinInfo.boneOffsets.Count == 0);
-            if (localBindSkin)
-            {
-                var mainFg = clone.transform.Find("Main FG");
-                if (mainFg != null)
-                {
-                    var s = mainFg.localScale;
-                    float avg = (Mathf.Abs(s.x) + Mathf.Abs(s.y) + Mathf.Abs(s.z)) / 3f;
-                    localBindSkin = avg < 10f;
-                    Plugin.Log.LogInfo($"Main FG scale={s}, bind={(localBindSkin ? "yes" : "no")}");
-                }
-            }
-
             clone.transform.SetParent(parent, true);
             clone.transform.localScale = Vector3.one;
+
+            var hiddenUntilBound = clone.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in hiddenUntilBound) if (r != null) r.enabled = false;
 
             if (GameObjectHelper.IsUICharacter(bean) || GameObjectHelper.IsLobbyCharacter(bean))
                 GameObjectHelper.SetLayerRecursively(clone, LayerMask.NameToLayer("PlayerUI"));
             if (GameObjectHelper.IsLobbyCharacter(bean))
                 clone.transform.localScale = Vector3.one;
 
-            yield return SetupBoneSyncCoroutine(clone, bean, slot.skinInfo, slot.bundle).WrapToIl2Cpp();
+            yield return SetupBoneSyncCoroutine(clone, bean).WrapToIl2Cpp();
             if (SlotDead(slot))
             {
                 if (clone != null) GameObject.Destroy(clone);
@@ -255,10 +231,8 @@ namespace BetterFG.Customization.Player
                 yield break;
             }
 
-            var sync = clone.GetComponent<BoneSyncComponent>();
-            if (localBindSkin && (sync == null || sync.boneOffsets == null || sync.boneOffsets.Count == 0))
-                if (BindSkinToLocalFallguy(clone, bean, "Acc") && sync != null)
-                    sync.enabled = false;
+            BindSkinToLocalFallguy(clone, bean, "Acc");
+            foreach (var r in hiddenUntilBound) if (r != null) r.enabled = true;
 
             SetRenderQueue(clone, 3000);
 
@@ -271,12 +245,28 @@ namespace BetterFG.Customization.Player
 
         // ── Item ──────────────────────────────────────────────────────────────
 
-        private bool BindSkinToLocalFallguy(GameObject clone, GameObject bean, string logname)
+        private void BindSkinToLocalFallguy(GameObject clone, GameObject bean, string logname)
         {
+            Transform chest = null;
+            foreach (var smr0 in clone.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (smr0.bones == null) continue;
+                foreach (var b in smr0.bones)
+                    if (b != null && b.name == "Chest_C_jnt") { chest = b; break; }
+                if (chest != null) break;
+            }
+            if (chest != null && chest.localPosition.magnitude < 0.05f)
+            {
+                Plugin.Log.LogInfo($"{logname}: rig reads as crushed ({chest.localPosition.magnitude:F4}), using retarget instead of bind");
+                return;
+            }
+
             var fgch = bean.GetComponent<FallguyCustomisationHandler>();
-            if (fgch == null) return false;
+            if (fgch == null) return;
 
             var fallguyBindposes = new Dictionary<string, Matrix4x4>(StringComparer.Ordinal);
+            var fallguyParent = new Dictionary<string, string>(StringComparer.Ordinal);
+            var perRenderer = new List<Dictionary<string, Matrix4x4>>();
             var baseSmrs = bean.GetComponentsInChildren<SkinnedMeshRenderer>(true);
             for (int b = 0; b < baseSmrs.Length; b++)
             {
@@ -284,17 +274,57 @@ namespace BetterFG.Customization.Player
                 if (baseSmr == null || baseSmr.sharedMesh == null || baseSmr.bones == null) continue;
                 var bindposes = baseSmr.sharedMesh.bindposes;
                 if (bindposes == null || bindposes.Length != baseSmr.bones.Length) continue;
+                var mine = new Dictionary<string, Matrix4x4>(StringComparer.Ordinal);
                 for (int bi = 0; bi < baseSmr.bones.Length; bi++)
                 {
                     var bone = baseSmr.bones[bi];
                     if (bone == null) continue;
-                    if (!fallguyBindposes.ContainsKey(bone.name)) fallguyBindposes[bone.name] = bindposes[bi];
+                    mine[bone.name] = bindposes[bi];
+                    if (!fallguyBindposes.ContainsKey(bone.name))
+                    {
+                        fallguyBindposes[bone.name] = bindposes[bi];
+                        if (bone.parent != null) fallguyParent[bone.name] = bone.parent.name;
+                    }
                     string lower = bone.name.ToLowerInvariant();
                     if (!fallguyBindposes.ContainsKey(lower)) fallguyBindposes[lower] = bindposes[bi];
                 }
+                perRenderer.Add(mine);
             }
 
             var smrs = clone.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            var rigOffsets = new List<BoneOffsetEntry>();
+            var seenBones = new HashSet<string>(StringComparer.Ordinal);
+            int rotationMismatches = 0;
+            string worstBone = null;
+            float worstAngle = 0f;
+            foreach (var smr0 in smrs)
+            {
+                if (smr0.bones == null) continue;
+                foreach (var b in smr0.bones)
+                {
+                    if (b == null || !seenBones.Add(b.name)) continue;
+                    Matrix4x4 bp = default, parentBp = default;
+                    bool paired = false;
+                    if (fallguyParent.TryGetValue(b.name, out var parentName))
+                        foreach (var dict in perRenderer)
+                            if (dict.TryGetValue(b.name, out bp) && dict.TryGetValue(parentName, out parentBp)) { paired = true; break; }
+
+                    if (paired)
+                    {
+                        var realRest = parentBp * bp.inverse;
+                        float angle = Quaternion.Angle(b.localRotation, realRest.rotation);
+                        if (angle > 1f)
+                        {
+                            rotationMismatches++;
+                            if (angle > worstAngle) { worstAngle = angle; worstBone = b.name; }
+                        }
+                        if ((b.localPosition - (Vector3)realRest.GetColumn(3)).sqrMagnitude >= 0.000001f)
+                            rigOffsets.Add(new BoneOffsetEntry { bone = b.name, localPosition = b.localPosition });
+                    }
+                }
+            }
+            Plugin.Log.LogInfo($"{logname}: binding all {seenBones.Count} bones, {rigOffsets.Count} carry an offset the skeleton gets driven to ({rotationMismatches} rotated off rest, worst {worstBone ?? "none"} at {worstAngle:F1} deg)");
+
             int bound = 0;
             int customBoneSmrs = 0;
             for (int i = 0; i < smrs.Length; i++)
@@ -330,6 +360,7 @@ namespace BetterFG.Customization.Player
                     }
 
                     fgch.BindMeshToFallguy(smr);
+
                     if (smr.sharedMesh != null && smr.bones != null && fallguyBindposes.Count > 0)
                     {
                         var newBindposes = new Matrix4x4[smr.bones.Length];
@@ -337,9 +368,10 @@ namespace BetterFG.Customization.Player
                         for (int bi = 0; bi < smr.bones.Length; bi++)
                         {
                             var bone = smr.bones[bi];
-                            if (bone == null ||
-                                (!fallguyBindposes.TryGetValue(bone.name, out newBindposes[bi]) &&
-                                 !fallguyBindposes.TryGetValue(bone.name.ToLowerInvariant(), out newBindposes[bi])))
+                            if (bone == null) { allMatched = false; break; }
+
+                            if (!fallguyBindposes.TryGetValue(bone.name, out newBindposes[bi]) &&
+                                !fallguyBindposes.TryGetValue(bone.name.ToLowerInvariant(), out newBindposes[bi]))
                             {
                                 allMatched = false;
                                 break;
@@ -399,6 +431,7 @@ namespace BetterFG.Customization.Player
                             smr.sharedMesh = mesh;
                         }
                     }
+
                     // the bind reparents this mesh OUT of the clone, so the clone's own
                     // InvisibilitySyncComponent no longer covers it and the game's controller never
                     // knew about it — it needs its own sync or it stays solid while the wearer is invisible
@@ -413,7 +446,12 @@ namespace BetterFG.Customization.Player
             {
                 Plugin.Log.LogInfo($"{logname}: bound {bound} skin SMRs to local fallguy, customBoneSMRs={customBoneSmrs}");
             }
-            return bound > 0 && customBoneSmrs == 0;
+
+            if (bound == 0 || customBoneSmrs > 0) return;
+            var sync = clone.GetComponent<BoneSyncComponent>();
+            if (sync == null) return;
+            if (rigOffsets.Count > 0) sync.DriveRealBonesFromOffsets(rigOffsets);
+            else sync.enabled = false;
         }
 
         private IEnumerator ApplyItemCoroutine(ActiveSkinSlot slot, GameObject bean, ApplyReason reason = ApplyReason.FromMenu)
@@ -538,127 +576,13 @@ namespace BetterFG.Customization.Player
 
         // ── BoneSync ──────────────────────────────────────────────────────────
 
-        private IEnumerator SetupBoneSyncCoroutine(GameObject clone, GameObject bean, SkinInfo skinInfo, AssetBundle bundle)
+        private IEnumerator SetupBoneSyncCoroutine(GameObject clone, GameObject bean)
         {
             var sync = clone.AddComponent<BoneSyncComponent>();
             sync.playerObject = bean;
             sync.isRemote = IsRemoteInRoundBean(bean);
             clone.AddComponent<InvisibilitySyncComponent>().playerObject = bean;
-
-            if (skinInfo.boneOffsets != null && skinInfo.boneOffsets.Count > 0)
-            {
-                sync.SetBoneOffsets(skinInfo.boneOffsets);
-                yield break;
-            }
-
-            // info.json was already read upstream (catalog/loader) and it had no offsets — don't waste
-            // a second github round-trip re-confirming that. this skin just uses its live costume bones.
-            if (skinInfo.infoFetched || bundle == null) yield break;
-
-            AssetBundleRequest infoReq = bundle.LoadAssetAsync("info.json");
-            yield return infoReq;
-
-            try { _ = clone.name; } catch { yield break; }
-
-            bool bundleHadOffsets = false;
-            if (infoReq.asset != null)
-            {
-                try
-                {
-                    var textAsset = infoReq.asset.Cast<TextAsset>();
-                    if (textAsset != null)
-                    {
-                        var infoJson = JsonUtility.FromJson<InfoJson>(textAsset.text);
-                        if (infoJson?.boneOffsets != null && infoJson.boneOffsets.Length > 0)
-                        {
-                            sync.SetBoneOffsets(new List<BoneOffsetEntry>(infoJson.boneOffsets));
-                            bundleHadOffsets = true;
-                        }
-                    }
-                }
-                catch (Exception ex) { Plugin.Log.LogWarning($"bad info.json in '{skinInfo.file}': {ex.Message}"); }
-            }
-
-            if (!bundleHadOffsets && !skinInfo.isLocalImport)
-                yield return FetchAndAssignOffsets(clone, skinInfo).WrapToIl2Cpp();
-        }
-
-        private IEnumerator FetchAndAssignOffsets(GameObject clone, SkinInfo skinInfo)
-        {
-            // the skinInfo that lands here is often a stub (restore-from-settings, active-slot re-apply
-            // onto a freshly-spawned bean like PB_UI_Character) with no boneOffsets and no repoFolder.
-            // the catalog already fetched + parsed every skin's info.json, offsets included, so pull the
-            // real folder (and offsets outright) from there by file before falling back to a guessed URL.
-            var catalog = CustomizationServices.CatalogService;
-            if (catalog != null)
-            {
-                foreach (var cat in catalog.AvailableSkins)
-                {
-                    if (cat.file != skinInfo.file) continue;
-                    if (!string.IsNullOrEmpty(cat.repoFolder)) skinInfo.repoFolder = cat.repoFolder;
-                    if (cat.boneOffsets != null && cat.boneOffsets.Count > 0)
-                    {
-                        var syncCat = clone.GetComponent<BoneSyncComponent>();
-                        if (syncCat != null) syncCat.SetBoneOffsets(cat.boneOffsets);
-                        Plugin.Log.LogInfo($"{cat.boneOffsets.Count} offsets recovered from catalog for '{skinInfo.file}'");
-                        yield break;
-                    }
-                    break;
-                }
-            }
-
-            // real layout is <repo>/Costumes/<folder>/info.json — the folder is NOT the file name, so a
-            // catalog miss with no repoFolder can't build a valid URL. bail loudly instead of 404ing silent.
-            if (string.IsNullOrEmpty(skinInfo.repoFolder))
-            {
-                Plugin.Log.LogWarning($"no repoFolder for '{skinInfo.file}' and not in catalog - can't fetch offsets, skin will use live costume bones only");
-                yield break;
-            }
-
-            string url = $"{GetRepoRaw(skinInfo)}/{skinInfo.repoFolder}/info.json";
-            Plugin.Log.LogInfo($"fetching offsets: {url}");
-
-            UnityWebRequest www = UnityWebRequest.Get(url);
-            yield return www.SendWebRequest();
-
-            if (www.result != UnityWebRequest.Result.Success)
-            {
-                Plugin.Log.LogWarning($"offset fetch failed ({www.result}) for {url}");
-                www.Dispose();
-                yield break;
-            }
-            string json = www.downloadHandler.text;
-            www.Dispose();
-
-            try { _ = clone.name; } catch { yield break; }
-            if (string.IsNullOrEmpty(json)) yield break;
-
-            var offsets = ParseBoneOffsetsFromJson(json);
-            if (offsets == null || offsets.Count == 0)
-            {
-                Plugin.Log.LogInfo($"info.json at {url} had no offsets");
-                yield break;
-            }
-
-            var sync = clone.GetComponent<BoneSyncComponent>();
-            if (sync != null) sync.SetBoneOffsets(offsets);
-            Plugin.Log.LogInfo($"{offsets.Count} offsets fetched for '{skinInfo.file}'");
-        }
-
-        private static List<BoneOffsetEntry> ParseBoneOffsetsFromJson(string json)
-        {
-            var offsets = new List<BoneOffsetEntry>();
-            foreach (string obj in JsonUtil.GetArray(json, "boneOffsets"))
-            {
-                string bone = JsonUtil.GetValue(obj, "bone");
-                if (string.IsNullOrEmpty(bone)) continue;
-                offsets.Add(new BoneOffsetEntry
-                {
-                    bone = bone,
-                    localPosition = new Vector3(JsonUtil.GetFloat(obj, "x"), JsonUtil.GetFloat(obj, "y"), JsonUtil.GetFloat(obj, "z")),
-                });
-            }
-            return offsets;
+            yield break;
         }
     }
 }

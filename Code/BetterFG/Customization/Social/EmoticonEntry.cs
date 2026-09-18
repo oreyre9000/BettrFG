@@ -11,6 +11,7 @@ namespace BetterFG.Customization.Social
         public bool enabled;
         public string imagePath;
         public string[] soundPaths;   // up to 3 sounds, one fires at random when played
+        public string name;
 
         public EmoticonEntry()
         {
@@ -20,6 +21,7 @@ namespace BetterFG.Customization.Social
             enabled = true;
             imagePath = "";
             soundPaths = new string[3] { "", "", "" };
+            name = "";
         }
     }
 }

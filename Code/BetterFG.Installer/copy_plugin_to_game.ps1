@@ -92,6 +92,10 @@ foreach ($game in $folders) {
         $libsDest = Join-Path $pluginDir "Libs"
         New-Item -ItemType Directory -Path $libsDest -Force | Out-Null
         Copy-Item -Path (Join-Path $libsSource "*") -Destination $libsDest -Force
+        Get-ChildItem -LiteralPath $libsDest -Filter *.dll | ForEach-Object {
+            $loose = Join-Path $pluginDir $_.Name
+            if (Test-Path $loose) { Remove-Item -LiteralPath $loose -Force }
+        }
     }
     Write-Host "$Store -> plugin copied to $pluginDir"
 }

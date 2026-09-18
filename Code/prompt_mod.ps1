@@ -55,6 +55,22 @@ function New-Drop([string]$text, [string[]]$items, [string]$selected) {
     return $dd
 }
 
+function New-Text([string]$text, [string]$value) {
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Text = $text
+    $lbl.Location = New-Object System.Drawing.Point(14, ($script:y + 3))
+    $lbl.Size = New-Object System.Drawing.Size(60, 20)
+    $script:container.Controls.Add($lbl)
+    $tb = New-Object System.Windows.Forms.TextBox
+    $tb.Text = $value
+    $tb.Location = New-Object System.Drawing.Point(82, $script:y)
+    $tb.Size = New-Object System.Drawing.Size(160, 22)
+    $script:container.Controls.Add($tb)
+    $script:y += 30
+    return $tb
+}
+
+$tbVer   = New-Text 'Version:' (Get-Saved 'Ver' '2.0.0')
 $cbSteam = New-Check 'Copy plugin to Steam' (Get-Saved 'Steam' $true)
 $cbEpic  = New-Check 'Copy plugin to Epic' (Get-Saved 'Epic' $true)
 $cbDl    = New-Check 'Copy installer to Downloads' (Get-Saved 'Dl' $true)
@@ -98,19 +114,21 @@ $state['Dl']    = $cbDl.Checked
 $state['Kill']  = $cbKill.Checked
 $state['Ea']    = $cbEa.Checked
 $state['Mach']  = $cbMach.Checked
+$state['Ver']   = $tbVer.Text
 $state | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
 
 function B([bool]$v) { if ($v) { '1' } else { '0' } }
 
 $ea = B $cbEa.Checked
 $mach = B $cbMach.Checked
+$ver = $tbVer.Text.Trim()
 
 if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
     $steam = B $cbSteam.Checked
     $epic  = B $cbEpic.Checked
     $dl    = B $cbDl.Checked
     $kill  = B $cbKill.Checked
-    Write-Output "BFGCHOICE:STEAM=$steam;EPIC=$epic;DL=$dl;KILL=$kill;EA=$ea;MACH=$mach;$modExtra"
+    Write-Output "BFGCHOICE:STEAM=$steam;EPIC=$epic;DL=$dl;KILL=$kill;EA=$ea;MACH=$mach;VER=$ver;$modExtra"
 } else {
-    Write-Output "BFGCHOICE:STEAM=0;EPIC=0;DL=0;KILL=0;EA=$ea;MACH=$mach;$modExtra"
+    Write-Output "BFGCHOICE:STEAM=0;EPIC=0;DL=0;KILL=0;EA=$ea;MACH=$mach;VER=$ver;$modExtra"
 }

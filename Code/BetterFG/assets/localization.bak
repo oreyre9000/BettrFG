@@ -15,9 +15,16 @@ tweak.customise_in_private_lobby	Customise In Private lobby
 tweak.disable_age_rating_popup	Disable Age Rating Popup
 tweak.disable_anti_afk_in_main_menu	Disable Anti-AFK in Main Menu
 tweak.disable_camera_assist	Disable Camera Assist
+tweak.custom_camera	Custom Camera Movement
+camera.category_label	Camera Movement
+camera.accel_label	Camera Acceleration
+camera.decel_label	Camera Deceleration
+camera.controller_only_label	Custom Camera: Only For Controller
 tweak.disable_player_emoticons	Disable Player Emoticons
 tweak.disable_player_phrases	Disable Player Phrases
 tweak.disable_ranked_emoticons	Disable Ranked Emoticons
+tweak.disable_step_assist	Disable Step Assist
+step_assist.tooltip	Stops the character auto-hopping up small ledges and bumps you walk into.
 tweak.dynamic_qual_screen	Dynamic Qual Screen
 tweak.fall_feed_qualification_time	Fall Feed Qualification Time
 tweak.hide_creator_code	Hide Creator Code
@@ -30,6 +37,15 @@ respawn.start_label	Respawn at Start (resets timer)
 respawn.quick_mode_label	Quick-respawn button targets
 respawn.quick_option_checkpoint	Checkpoint
 respawn.quick_option_start	Start
+respawn.prompt_respawn	Respawn
+respawn.prompt_mode_start	Mode: Start
+respawn.prompt_mode_checkpoint	Mode: Checkpoint
+binds.respawn	BettrFG: Respawn
+binds.respawn_mode	BettrFG: Toggle Respawn Mode
+binds.pb_save	BettrFG: Save PB
+binds.pb_favorite	BettrFG: Favorite PB
+binds.pb_override	BettrFG: Set As PB
+binds.squads_toggle	BettrFG: Toggle Squads Leaderboard
 tweak.instant_landing_indicator	Instant Landing Indicator
 tweak.keep_nametags_on_qual_screen	Keep nametags on qual screen
 tweak.lobby_autokick_bad_names	Lobby Autokick Bad Names
@@ -40,6 +56,8 @@ tweak.more_fall_feed_notifications.tip	Adds Fall Feed notifications the game doe
 tweak.multi_show_queue	Multi-Show Queue
 tweak.neutralize_eos_voice_chat	Neutralize EOS voice-chat
 tweak.notify_round_start	Notify round start
+tweak.playtest_trail	Playtest trail in creative
+tweak.playtest_trail.tip	Draws the path your bean took on the last playtest as a line in the creative editor. Redrawn every time you leave a playtest.
 tweak.quick_skip_rewards_screen	Quick Skip Rewards Screen
 tweak.quick_skip_victory_scene	Quick Skip Victory Scene
 tweak.random_show_select	Random Show / Mode
@@ -48,6 +66,8 @@ tweak.refocus_game_press_c	Refocus game (press C)
 tweak.retro_goop_materials	Unity slime in creative
 tweak.shadow_custom_px	Shadow custom px
 tweak.shadow_distance	Shadow distance
+tweak.show_discovery_dislikes	Show level dislikes
+tweak.show_discovery_dislikes_tip	Shows a level's dislike count next to its likes on Discovery tiles and in the creative Level Browser. Costs one extra request to the level service per page of tiles.
 tweak.show_discovery_play_counts	Show Discovery play counts
 tweak.show_level_description_on_pause	Show Level Description on Pause
 tweak.show_round_number_in_objective	Show round number in objective
@@ -400,7 +420,7 @@ ui.leave_empty_to_use_real_name	leave empty to use real name
 ui.left_click	Left click
 ui.legacy_shaders_particles_additive	Legacy Shaders/Particles/Additive
 ui.level_description	LEVEL DESCRIPTION
-ui.level_import_export	LEVEL IMPORT / EXPORT
+ui.level_import_export	LEVEL OPTIONS
 ui.level_thumbnail	LEVEL THUMBNAIL
 ui.light_blue	LIGHT BLUE
 ui.light_squinting	Light squinting
@@ -844,6 +864,67 @@ leaderboard.disconnected	DISCONNECTED
 leaderboard.playerleft	LEFT
 leaderboard.out	OUT
 leaderboard.squad_fallback_fmt	Squad {0}
+pb.use_qual_banner	Use the qualification banner instead
+pb.banner_personal_best	PERSONAL BEST!
+level_browse.chip_search	SEARCH
+level_browse.chip_filter	FILTER
+level_browse.chip_count	{0} OF {1}
+level_browse.menu_title	FILTER AND SORT
+level_browse.menu_body	Applies to this browser session only.
+level_browse.header_sort	SORT
+level_browse.header_filter	FILTER
+level_browse.row_sort	Sort: {0}
+level_browse.row_show	Show: {0}
+level_browse.row_search	Search: {0}
+level_browse.row_reset	Reset ({0} of {1} shown)
+level_browse.any	any
+level_browse.sort_recent	Recent (default)
+level_browse.sort_az	Name A to Z
+level_browse.sort_za	Name Z to A
+level_browse.sort_likes	Most liked
+level_browse.sort_plays	Most played
+level_browse.show_all	All levels
+level_browse.show_changes	Unsaved changes
+level_browse.show_progress	In progress
+level_browse.show_completed	Completed
+level_browse.search_title	Search levels
+level_browse.search_body	Part of a level name, or a share code.
+level_browse.search_placeholder	name or code
+emoticon_editor.title	CUSTOM EMOTICON
+emoticon_editor.body	Pick an image and up to three sounds, then save. It shows up in this grid and can be put on any wheel slot like a normal emoticon.
+emoticon_editor.header	EMOTICON
+emoticon_editor.row_image	Image: {0}
+emoticon_editor.row_name	Name: {0}
+emoticon_editor.row_sound	Sound {0}: {1}
+emoticon_editor.none	none
+emoticon_editor.save	Save
+emoticon_editor.save_needs_image	Save (pick an image first)
+emoticon_editor.name_title	Emoticon name
+emoticon_editor.name_body	Shown as the item name in the locker.
+emoticon_editor.name_placeholder	name
+emoticon_editor.pick_image	Select emoticon image
+emoticon_editor.pick_sound	Select sound
+emoticon_editor.edit_title	EDIT EMOTICON
+emoticon_editor.manage_title	CUSTOM EMOTICON
+emoticon_editor.manage_body	Edit its image, name and sounds, or remove it.
+emoticon_editor.edit	Edit
+emoticon_editor.delete	Delete
+emoticon_editor.prompt	Edit / Delete
+phrase_editor.title	CUSTOM PHRASE
+phrase_editor.body	Type the phrase text, optionally pick an image and up to three sounds, then save. It shows up in this grid and can be put on any wheel slot like a normal phrase.
+phrase_editor.header	PHRASE
+phrase_editor.row_text	Text: {0}
+phrase_editor.save_needs_text	Save (type the text first)
+phrase_editor.text_title	Phrase text
+phrase_editor.text_body	What the speech bubble says.
+phrase_editor.text_placeholder	phrase
+phrase_editor.edit_title	EDIT PHRASE
+phrase_editor.manage_title	CUSTOM PHRASE
+phrase_editor.manage_body	Edit its text, image and sounds, or remove it.
+phrase_editor.add_tile	NEW PHRASE
+level_port.menu_body	Choose an action for "{0}".
+level_port.menu_body_code	Choose an action for "{0}" [{1}].
+level_port.copy_code	COPY LEVEL CODE
 rpc.exporting_replay_fmt	Exporting a replay ({0}%)
 rpc.editing_replay_fmt	Editing a replay ({0})
 rpc.viewing_personal_bests	Viewing personal bests
@@ -926,6 +1007,17 @@ tweak.hide_zone_arch_effects	Hide Zone Arch Effects
 customlights.name	Light
 customlights.radius	Radius
 customlights.intensity	Intensity
+thruster.name	Thruster
+thruster.size	Size
+thruster.beam	Beam Length
+thruster.colour	Colour
+gravityzone.name	Gravity Zone
+gravityzone.length	Length
+gravityzone.height	Height
+gravityzone.width	Width
+gravityzone.gravity	Gravity
+gravityzone.low	Low
+gravityzone.high	High
 introcams.base_name	Intro Camera Rig
 introcams.base_description	The intro camera rig for this level. Delete it and the flythrough goes back to automatic.
 introcams.shot_name	Intro Camera Shot
@@ -940,11 +1032,90 @@ creativeobjects.light	Light
 creativeobjects.light_desc	Drop a point light. Colour and scale it like a normal object, it goes dark and invisible once the round plays
 creativeobjects.introcam	Intro Camera
 creativeobjects.introcam_desc	Place the intro camera rig, then add a shot for each angle. They play in order number.
+creativeobjects.thruster	Thruster
+creativeobjects.thruster_desc	Drop an ion thruster. It is art only, link the object it pushes to a movement controller and the beam fires whenever that object moves
+creativeobjects.gravityzone	Gravity Zone
+creativeobjects.gravityzone_desc	Draw out a gravity zone the way you would a kill zone. It is art and effects only, gravity itself never changes
+creativeobjects.unityroundcore	Unity Round Core
+creativeobjects.unityroundcore_desc	Drives the Unity round loaded into this level. You'll need a round already built before this does anything.
+creativeobjects.unityroundanchor	Unity Object Anchor
+creativeobjects.unityroundanchor_desc	Aim at an object in your Unity round and drop an anchor in it. Link the anchor to a movement or rotation controller and the object moves with it.
+unityroundcore.name	Unity Round Core
+unityroundcore.description	This drives the Unity round loaded into your level, delete it and the binding goes with it.
+unityroundanchor.name	Unity Object Anchor
+unityroundanchor.description	Sits at the centre of a Unity round object. Link it to a movement or rotation controller and that object is driven by it.
+unityroundanchor.placed	Anchor dropped in {0}. Link a movement or rotation controller to it.
+unityroundanchor.no_round	No Unity round loaded, so there is nothing to anchor to.
+unityroundanchor.nothing_aimed	No Unity round object with collision where you are aiming.
+unityroundcore.cat_location	Location
+unityroundcore.cat_settings	Round Settings
+unityroundcore.cat_publish	Publish
+unityroundcore.row_back	Back
+unityroundcore.placed_notice	Placed. This drives your loaded Unity round.
+unityroundcore.loc_title	Unity Round Location
+unityroundcore.loc_body	Point this at your round's info.json.
+unityroundcore.loc_header	Round file
+unityroundcore.row_path_unset	Path: not set
+unityroundcore.row_path	Path: {0}
+unityroundcore.row_browse	Browse...
+unityroundcore.row_load	Load
+unityroundcore.row_unload	Unload
+unityroundcore.path_prompt_title	Round info.json path
+unityroundcore.path_prompt_body	Paste the full path to your round's info.json.
+unityroundcore.path_placeholder	C:\path\to\info.json
+unityroundcore.browse_title	Select round info.json
+unityroundcore.settings_title	Round Settings
+unityroundcore.settings_body	These write straight into info.json.
+unityroundcore.settings_header	Round settings
+unityroundcore.row_hidebackground	Hide background
+unityroundcore.row_hideobjects	Hide all objects
+unityroundcore.row_hidelights	Hide all lights
+unityroundcore.row_hidefinish	Hide finish lines
+unityroundcore.row_hidethemelighting	Hide theme lighting
+unityroundcore.row_ambience	Ambience: {0}
+unityroundcore.publish_title	Publish
+unityroundcore.publish_body	Share this round so it loads for everyone else too.
+unityroundcore.publish_header	Publish
+unityroundcore.row_url_unset	Share URL: not set
+unityroundcore.row_url	Share URL: {0}
+unityroundcore.url_prompt	Type the GitHub info.json link
+unityroundcore.row_share_unset	Share link: not set
+unityroundcore.row_share_set	Share link: set
+unityroundcore.row_setdescription	Set level description
+unityroundcore.share_prompt_title	Round share link
+unityroundcore.share_prompt_body	Paste the GitHub link to your round's info.json.
+unityroundcore.share_placeholder	https://github.com/owner/repo/.../info.json
+creativeexpansion.title	Creative Expansion
+creativeexpansion.custombackgrounds	Add custom backgrounds to a level
+creativeexpansion.objectthemes	Reskin placed objects with alternate themes
+creativeexpansion.colouring	Recolour rule objects, goop and add neon to objects
+creativeexpansion.customobjects	Place custom lights, intro cameras and thrusters
+creativeexpansion.creativegroups	Group objects and save selections for reuse
+creativeexpansion.creativegamemode	Change a level's game mode from the rulebook
+creativeexpansion.creativethumbnail	Pick a custom thumbnail when publishing
+creativeexpansion.levelbrowse	Search, sort and filter the level browser
+creativeexpansion.levelport	Import and export levels between accounts
+creativeexpansion.levelcode	Copy and paste level and lobby codes
+creativeexpansion.publishwarning	Warn before publishing if the level uses BettrFG-only content
+publishwarning.title	BettrFG-only content
+publishwarning.intro	Users that do not use BettrFG will be able to play your round as intended gameplay-wise, but will not be able to see the following changes. Please inform others before sharing this level with anyone.
+publishwarning.background	Custom background that Fall Guys doesn't have
+publishwarning.themes_fmt	Custom themes on objects ({0}x)
+publishwarning.visualobjects_fmt	Custom visual objects ({0}x)
+publishwarning.materials_fmt	Custom materials and colours ({0}x)
+publishwarning.missing_publish	This level will not be a BettrFG Unity level because you have not filled out the Publish section in the core object's parameters.
+publishwarning.exclusive	This level is EXCLUSIVELY a BettrFG round, the meshes, textures, materials, lighting, and some objects with collision are purely seen or interactable by those who have BettrFG. The level description should already make it clear for those viewing the level, but please inform any recipient before sharing the level.
 creative.gizmo_scale	Editor gizmo size
 neon.material_entry	Neon
+rulecolours.base	Base Colour
+rulecolours.rim	Rim Colour
+rulecolours.fences	Fence Colour
+slimecolour.colour	Slime Colour
 custombackgrounds.theme_identifier_name_fmt	Theme identifier ({0})
 custombackgrounds.theme_identifier_description	This remembers your level's custom background theme — delete it and the theme resets.
 customlights.description	This powers a custom light in your level — delete it and the light goes with it.
+thruster.description	This powers a thruster in your level, delete it and the thruster goes with it.
+gravityzone.description	This powers a gravity zone in your level, delete it and the zone goes with it.
 identifierobject.keep_button	Keep me!!!!!!!! Pls
 custombackgrounds.disable_background_label	Disable Background
 bg3d.title	3D Background
@@ -1053,7 +1224,16 @@ asset_export.summary	skin: {0}
 writes an FBX with its armature plus every texture it uses
 asset_export.done	{0} mesh(es), {1} bones and {2} textures written
 asset_export.reading_bundles	Reading the game files...
-asset_export.no_python	The bundle reader isn't installed. Run the BettrFG installer and add the asset export tools
+asset_export.no_python	The bundle reader isn't installed, so this export can't run
+asset_export.install_ask	You are exporting a Unity asset for the first time. To do this, certain dependencies are required for this task. About 85 MB of files will be installed onto your machine.
+
+Would you like to proceed?
+asset_export.installing_title	Bundle reader
+asset_export.installing	Setting up the bundle reader, this only happens once
+asset_export.installing_python	Downloading Python (11MB)...
+asset_export.installing_pip	Setting up pip...
+asset_export.installing_unitypy	Installing UnityPy (30MB)...
+asset_export.install_failed	The bundle reader couldn't be installed, check your connection and the BepInEx log
 assets.options	Options
 assets.configure_project	Configure Unity project
 asset_export.project_title	Unity project
@@ -1136,6 +1316,69 @@ assets.export_png	Export as PNG
 assets.export_bank	Export bank and MP3s
 assets.cubemap_hint	Cubemap, export it to get the six faces as PNGs
 assets.cubemap_failed	No faces came out of that cubemap
+texpack.tab_title	Texture Packs
+texpack.make_new	+ MAKE NEW PACK
+texpack.load_existing	LOAD EXISTING PACK
+texpack.file	File
+texpack.pack	Pack
+texpack.exit	Exit
+texpack.search_hint	Search by name
+texpack.search	Search
+texpack.name_hint	Pack name
+texpack.author_hint	Your name
+texpack.load_failed	Couldn't load that project
+texpack.load_no_manifest	No manifest.json in that folder
+texpack.loaded	Loaded {0} ({1} textures)
+texpack.pick_pack	Pick a .bfgtp texture pack
+texpack.importing	Importing textures {0}/{1}
+texpack.import_failed	Couldn't import that pack: {0}
+texpack.packing	Packing textures {0}/{1}
+texpack.removed	Removed from the list
+texpack.no_project	Make or load a project first
+texpack.export_and_open	Export and Open
+texpack.export_and_open_atlas	Export and Open the Atlas
+texpack.open	Open
+texpack.open_atlas	Open the Atlas
+texpack.restore_original	Bring back to original
+texpack.restore_atlas_original	Bring atlas back to original
+texpack.restored_one	{0} is back to the original
+texpack.index_names	Name unnamed textures
+texpack.indexing	Naming textures {0}/{1}
+texpack.indexed	{0} textures got a name
+texpack.exporting_one	Exporting...
+texpack.export_one_failed	That one wouldn't export
+texpack.export_one_failed_reason	Export failed: {0}
+texpack.exported_one	{0} opened for editing
+texpack.pack_failed	Pack failed: {0}
+texpack.packed	Packed {0}
+texpack.enable	Enable
+texpack.disable	Disable
+texpack.enabled	Texture pack enabled
+texpack.disabled	Texture pack disabled
+texpack.pack_first	Pack it first
+texpack.enable_failed	Couldn't enable that pack: {0}
+texpack.wizard_title	New Texture Pack
+texpack.wizard_name_body	What will you name your pack?
+texpack.wizard_author_body	Who is the author of this texture pack? (your name)
+texpack.wizard_location_body	Where should this project live? Every exported texture and the packed file go here.
+texpack.wizard_location_body_picked	{0}
+texpack.wizard_next	NEXT
+texpack.wizard_back	BACK
+texpack.wizard_cancel	CANCEL
+texpack.wizard_create	CREATE
+texpack.wizard_save	SAVE
+texpack.browse	BROWSE
+texpack.pick_project_folder	Pick a project folder
+texpack.settings	Settings
+texpack.settings_link	Settings >
+texpack.settings_back	< Preview
+texpack.settings_name	Name
+texpack.settings_author	Author
+texpack.settings_compression	Compression
+texpack.settings_cover_art	Cover Art
+texpack.settings_change_cover	Change
+texpack.settings_no_cover	None
+texpack.unnamed_texture	Unnamed texture ({0})
 machinima.new	NEW MACHINIMA
 machinima.filter	Machinima
 machinima.badge	MACHINIMA
@@ -1232,3 +1475,43 @@ machinima.turn_on	Toward travel
 machinima.turn_off	Keep facing
 machinima.bake	BAKE MOVEMENT
 machinima.baking	Simulating the beans...
+audio_mix.ambience	Ambience
+audio_mix.voice	Fall Guy Noises
+audio_mix.emotes	Emotes & Phrases
+colourblind.mode	Colourblind mode
+colourblind.mode.off	Off
+colourblind.mode.protan	Protanopia (red-blind)
+colourblind.mode.deutan	Deuteranopia (green-blind)
+colourblind.mode.tritan	Tritanopia (blue-blind)
+colourblind.mode.achroma	Achromatopsia (no colour)
+colourblind.strength	Colourblind strength
+keyboard.key_shift	Shift
+keyboard.key_space	Space
+keyboard.key_back	Delete
+keyboard.key_done	Done
+keyboard.hint	{0} select, {1} close, {2} delete, {3} shift
+objectthemes.theme	Theme
+objectthemes.balloon	Balloon
+objectthemes.original	Original
+objectthemes.gravitylow	Low Gravity
+objectthemes.gravityhigh	High Gravity
+objectthemes.jungle	Jungle
+objectthemes.party	Party
+objectthemes.sunken	Sunken
+objectthemes.retro	Retro
+objectthemes.sonic	Sonic
+objectthemes.stadium	Stadium
+objectthemes.space	Space
+objectthemes.pink	Pink
+objectthemes.yellow	Yellow
+objectthemes.medieval	Medieval
+objectthemes.pistachio	Pistachio
+objectthemes.fruit	Fruit
+objectthemes.winter	Winter
+objectthemes.halloween	Halloween
+objectthemes.legacy	Legacy
+objectthemes.future	Future
+objectthemes.blue	Blue
+objectthemes.purple	Purple
+objectthemes.green	Green
+objectthemes.red	Red

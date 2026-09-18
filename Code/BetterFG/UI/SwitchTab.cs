@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using BetterFG.Services;
 using UnityEngine;
 using UnityEngine.UI;
@@ -63,7 +63,7 @@ namespace BetterFG.UI
             var rt = _switchLink.rectTransform;
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 0.5f);
             rt.sizeDelta = new Vector2(rt.sizeDelta.x, TITLE_H);
-            rt.anchoredPosition = new Vector2(_titleText.preferredWidth + UIScale.PAD * 1.5f, 0f);
+            rt.anchoredPosition = new Vector2(UGUIShip.PreferredWidth(_titleText) + UIScale.PAD * 1.5f, 0f);
         }
     }
 }

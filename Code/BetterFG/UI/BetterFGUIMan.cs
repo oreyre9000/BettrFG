@@ -47,9 +47,9 @@ namespace BetterFG.UI
             // (no cap) or always be MaxWidth (LayoutGroup forcing it). set width on the tooltip
             // rect FIRST so the stretch-anchored label inherits it, then read preferredHeight which
             // now reflects the wrapped line count.
-            float textW = Mathf.Min(MaxWidth - PadX, _label.preferredWidth);
+            float textW = Mathf.Min(MaxWidth - PadX, UGUIShip.PreferredWidth(_label));
             if (_rt != null) _rt.sizeDelta = new Vector2(textW + PadX, _rt.sizeDelta.y);
-            float textH = _label.preferredHeight;
+            float textH = UGUIShip.PreferredHeight(_label, textW);
             if (_rt != null) _rt.sizeDelta = new Vector2(textW + PadX, textH + PadY);
         }
 
@@ -126,6 +126,7 @@ namespace BetterFG.UI
         // own title bar uses, without touching that identity.
         public static void Register<T>() where T : Tab
         {
+            if (BetterFG.Utilities.FeatureAvailability.Off(typeof(T).Name)) return;
             string title = ReadTitle<T>(out string titleId, out string bgRes);
             if (string.IsNullOrEmpty(title)) return;
 
@@ -149,6 +150,7 @@ namespace BetterFG.UI
 
         public static void RegisterPartialTab<T>() where T : Tab
         {
+            if (BetterFG.Utilities.FeatureAvailability.Off(typeof(T).Name)) return;
             string title = ReadTitle<T>();
             if (string.IsNullOrEmpty(title)) return;
             _partialTabs[title] = () => NewTab<T>();
@@ -724,13 +726,12 @@ namespace BetterFG.UI
 
         private void UpdateInputNavState()
         {
-            // while our UI is up in the level editor, kill all game input even if no field is
-            // focused — otherwise editor hotkeys/movement fire through the open overlay. the batch-edit
-            // window counts too even when the main overlay's closed, else clicking a selected object
-            // under the cursor deselects it out from under the batch op.
-            bool inLE = Features.UnityRound.Editor.UnityRoundLoader.InLevelEditor;
-            bool inputRestricted = inLE && (_visible || UI.Windows.Creative.BatchEditWindow.AnyOpen
-                                            || UI.Windows.Creative.PublishThumbnailWindow.StepActive);
+            // while our UI is up, kill all game input even if no field is focused — otherwise menu
+            // nav, movement and editor hotkeys fire through the open overlay. the batch-edit window
+            // counts too even when the main overlay's closed, else clicking a selected object under
+            // the cursor deselects it out from under the batch op.
+            bool inputRestricted = _visible || UI.Windows.Creative.BatchEditWindow.AnyOpen
+                                   || UI.Windows.Creative.PublishThumbnailWindow.StepActive;
             FGInputLockService.SetEditorUiLock(inputRestricted);
 
             // show the hint whenever the UI is open (not just in creative), since game input is
@@ -1291,10 +1292,28 @@ namespace BetterFG.UI
                 || cur.currentSelectedGameObject.GetComponent<TMP_InputField>() != null;
         }
 
+        // fields we built into the GAME's hierarchy rather than our own canvas. they still count as
+        // ours for the input lock and the on-screen keyboard, they just can't be found by walking up.
+        private static readonly HashSet<int> _adoptedFields = new HashSet<int>();
+
+        internal static void AdoptField(GameObject go)
+        {
+            if (go != null) _adoptedFields.Add(go.GetInstanceID());
+        }
+
+        internal static void DropField(GameObject go)
+        {
+            if (go != null) _adoptedFields.Remove(go.GetInstanceID());
+        }
+
+        internal static bool IsAdoptedField(int instanceId) => _adoptedFields.Contains(instanceId);
+
         // true if the transform sits under one of OUR canvases. window canvases are
         // separate GameObjects from _canvas, so walk up and match by canvas name.
-        private bool IsOurField(Transform t)
+        internal bool IsOurField(Transform t)
         {
+            if (_adoptedFields.Count > 0 && _adoptedFields.Contains(t.gameObject.GetInstanceID())) return true;
+
             var p = t;
             while (p != null)
             {

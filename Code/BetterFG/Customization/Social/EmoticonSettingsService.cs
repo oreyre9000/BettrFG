@@ -57,7 +57,8 @@ namespace BetterFG.Customization.Social
                             p.Length > 5 ? p[5].Trim() : "",
                             p.Length > 6 ? p[6].Trim() : "",
                             p.Length > 7 ? p[7].Trim() : ""
-                        }
+                        },
+                        name = p.Length > 8 ? p[8].Trim() : ""
                     });
                 }
             }
@@ -82,7 +83,8 @@ namespace BetterFG.Customization.Social
                     string s0 = (e.soundPaths != null && e.soundPaths.Length > 0 ? e.soundPaths[0] ?? "" : "").Replace("|", "");
                     string s1 = (e.soundPaths != null && e.soundPaths.Length > 1 ? e.soundPaths[1] ?? "" : "").Replace("|", "");
                     string s2 = (e.soundPaths != null && e.soundPaths.Length > 2 ? e.soundPaths[2] ?? "" : "").Replace("|", "");
-                    lines.Add($"{e.id}|{safeId}|{e.slot}|{(e.enabled ? "1" : "0")}|{safePath}|{s0}|{s1}|{s2}");
+                    string safeName = (e.name ?? "").Replace("|", "");
+                    lines.Add($"{e.id}|{safeId}|{e.slot}|{(e.enabled ? "1" : "0")}|{safePath}|{s0}|{s1}|{s2}|{safeName}");
                 }
                 File.WriteAllLines(FilePath, lines);
             }

@@ -749,7 +749,7 @@ namespace BetterFG.Customization.Player
         }
 
         // crops a sprite's rect out of its atlas texture into a standalone Texture2D we own outright
-        private static Texture2D CropAtlasToTexture2D(Sprite spr, string name)
+        public static Texture2D CropAtlasToTexture2D(Sprite spr, string name)
         {
             var atlas = spr.texture;
             if (atlas == null) return null;

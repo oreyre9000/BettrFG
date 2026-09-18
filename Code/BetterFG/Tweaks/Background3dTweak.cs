@@ -197,6 +197,7 @@ namespace BetterFG.Tweaks
         private static float _prevFogDensity;
         private static Color _prevFogColor;
         private static bool _busy;
+        private static int _gen;
 
         void Awake() => Instance = this;
 
@@ -295,6 +296,7 @@ namespace BetterFG.Tweaks
 
         public override void DisableTweak()
         {
+            _gen++;
             if (_spawned != null) Destroy(_spawned);
             _spawned = null;
 
@@ -412,11 +414,7 @@ namespace BetterFG.Tweaks
             ApplyIfWanted();
         }
 
-        internal static void Cancel()
-        {
-            _background = null;
-            Instance?.DisableTweak();
-        }
+        internal static void Cancel() => Instance?.DisableTweak();
 
         internal static void ApplyIfWanted()
         {
@@ -424,12 +422,20 @@ namespace BetterFG.Tweaks
             if (inst == null || !inst.IsEnabled || _busy || _spawned != null) return;
             if (GameObjectHelper.IsMainMenuUp()) return;
 
-            if (BetterFG.Features.CustomBackgrounds.Definers.HasDefiner())
+            if (BetterFG.Features.UnityRound.BetterFGUnityRounds.RoundLoadingOrActive) return;
+            if (Features.UnityRound.Editor.UnityRoundLoader.HasSpawned && Features.UnityRound.Editor.UnityRoundLoader.HideBackground) return;
+
+            if (BetterFG.Features.CreativeExpansion.Definers.HasDefiner())
             {
                 Plugin.Log.LogInfo("a custom theme owns this level, our 3d terrain stays out of it");
                 return;
             }
-            if (BetterFG.Features.CustomBackgrounds.DisableBackgroundRulebook.IsDisabled()) return;
+            if (BetterFG.Features.CreativeExpansion.DisableBackgroundRulebook.IsDisabled()) return;
+            if (_background == null && ThemeManager._sceneBackgroundAndLighting == null)
+            {
+                Plugin.Log.LogWarning("3d backdrop wanted but there's no background root to hang it on");
+                return;
+            }
             if (_background == null && !Resolve(ThemeManager._sceneBackgroundAndLighting)) return;
 
             inst.StartCoroutine(inst.Apply().WrapToIl2Cpp());
@@ -438,6 +444,7 @@ namespace BetterFG.Tweaks
         private IEnumerator Apply()
         {
             _busy = true;
+            int gen = _gen;
 
             var background = _background;
             var swap = _swap;
@@ -487,7 +494,7 @@ namespace BetterFG.Tweaks
                 yield break;
             }
 
-            if (background == null || _spawned != null) { _busy = false; yield break; }
+            if (background == null || _spawned != null || gen != _gen) { _busy = false; yield break; }
 
             _hidden.Clear();
             foreach (var paths in new[] { HideOnApply, swap.Hide })

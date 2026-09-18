@@ -52,6 +52,8 @@ namespace BetterFG.Services
 
         public static bool HasUserSetScale() => SettingsService.Get(KEY_SCALE_USERSET, "false") == "true";
 
+        public static float ClampSkinScale(float v) => v > 0f ? Mathf.Clamp(v, 0.5f, 1.5f) : 0f;
+
         public static void ClearUserSetScale() => SettingsService.Set(KEY_SCALE_USERSET, "false");
 
         // true only in a LIVE multiplayer round: there's a real local match controller AND other players
@@ -213,20 +215,6 @@ namespace BetterFG.Services
                 if (reason == ScaleReason.Manual && InLivePublicRound() && !Mathf.Approximately(resolved, scale))
                     UI.BetterFGUIMan.Instance?.ShowTooltipTimed("Couldn't scale you, you're in a public lobby.", 2f);
             }
-            else if (bean != BeanMonitorService.LocalPlayerBean)
-            {
-                Transform character = bean.transform.Find("Character");
-                if (character != null)
-                {
-                    var ikController = character.GetComponent<FallGuyIkController>();
-                    if (ikController != null)
-                    {
-                        ikController.enabled = false;
-                        Plugin.Log.LogInfo($"PlayerScale: destroyed ik on {bean.name}");
-                    }
-                }
-            }
-
             if (!inRound && bean.GetComponent<Rigidbody>() == null)
             {
                 bean.transform.localScale = new Vector3(resolved, resolved, resolved);
@@ -238,17 +226,30 @@ namespace BetterFG.Services
 
             if (Mathf.Approximately(resolved, 1f))
             {
+                SetIk(bean, true);
                 if (rig == null) return;
                 rig.Teardown();
                 BetterFG.Customization.Player.SkinApplicationService.Instance?.ScaleAppliedSkins(bean, 1f);
                 return;
             }
 
+            if (mode != BeanScaleMode.Local) SetIk(bean, false);
+
             if (rig == null) rig = BeanVisualRig.Create(bean);
             if (rig == null) return;
             rig.Rebind();
             rig.SetScale(resolved);
             BetterFG.Customization.Player.SkinApplicationService.Instance?.ScaleAppliedSkins(bean, resolved);
+        }
+
+        private static void SetIk(GameObject bean, bool on)
+        {
+            Transform character = bean.transform.Find("Character");
+            if (character == null) return;
+            var ikController = character.GetComponent<FallGuyIkController>();
+            if (ikController == null || ikController.enabled == on) return;
+            ikController.enabled = on;
+            Plugin.Log.LogInfo($"PlayerScale: ik {(on ? "back on" : "off while scaled")} for {bean.name}");
         }
 
         private Transform GetOrCreateWrapper(GameObject bean)

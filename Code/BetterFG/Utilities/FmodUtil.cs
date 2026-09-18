@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using FMOD;
 using FMOD.Studio;
 using FMODUnity;
@@ -49,6 +49,16 @@ namespace BetterFG.Utilities
             }
             catch (Exception ex) { Plugin.Log.LogWarning($"couldn't sweep fmod instances: {ex.Message}"); }
             return stopped;
+        }
+
+        public static void SetBusVolume(string path, float volume)
+        {
+            try
+            {
+                var bus = RuntimeManager.GetBus(path);
+                if (bus.isValid()) bus.setVolume(volume);
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning($"couldn't set volume on {path}: {ex.Message}"); }
         }
 
         public static void UnmuteBus(string path)

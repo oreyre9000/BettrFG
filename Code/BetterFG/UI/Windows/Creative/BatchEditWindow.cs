@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BetterFG.Features.CreativeGroups;
+using BetterFG.Features.CreativeExpansion;
 using BetterFG.Features.CreativeIncrements;
 using BetterFG.Features.Replay;
 using BetterFG.Services;
@@ -11,7 +11,7 @@ using LevelEditor;
 using BetterFG.Utilities;
 using UnityEngine;
 using UnityEngine.UI;
-using Groups = BetterFG.Features.CreativeGroups.CreativeGroups;
+using Groups = BetterFG.Features.CreativeExpansion.CreativeGroups;
 using BettrFG.uGUI;
 
 namespace BetterFG.UI.Windows.Creative
@@ -88,15 +88,10 @@ namespace BetterFG.UI.Windows.Creative
         private BatchEditHistory.BatchEntry _colourEntry;
         private int _colourSessionSelCount; // selection count when the session opened — commit if it changes
 
-        // scale state — _offsets is the per-axis cumulative delta since the first nudge (the display,
-        // persists across holds; resets on undo). _committedOffsets is how much of that total is already
-        // baked into committed undo entries — each session only applies (_offsets - _committedOffsets)
-        // against its fresh snapshot baseline, otherwise every new hold would re-apply the whole total
-        // on top of already-scaled objects and compound.
-        private const float OFFSET_LIMIT = 1000f; // typed offsets, way past anything the game will take
-        private readonly float[] _offsets = { 0f, 0f, 0f };
-        private readonly float[] _committedOffsets = { 0f, 0f, 0f };
-        private ScaleMode _scaleMode = ScaleMode.Individual;
+        private const float FACTOR_LIMIT = 1000f;
+        private readonly float[] _factors = { 1f, 1f, 1f };
+        private readonly float[] _committedFactors = { 1f, 1f, 1f };
+        private static ScaleMode _scaleMode = ScaleMode.Individual;
         private readonly InputField[] _valFields = new InputField[3];
         private Text _modeLabel;
         private readonly UGUIShip.HoldButtonState[] _scaleHold = new UGUIShip.HoldButtonState[6]; // -/+ per axis
@@ -124,6 +119,7 @@ namespace BetterFG.UI.Windows.Creative
 
         public static void OpenGroupsTool()
         {
+            if (!Groups.Enabled) return;
             if (Instance != null)
             {
                 if (LibraryOnly) return;
@@ -404,9 +400,9 @@ namespace BetterFG.UI.Windows.Creative
             _scaleRowsGroup = rowsGo.AddComponent<CanvasGroup>();
             var rows = rowsRt;
 
-            // one row per axis:  X   [-] 0.00 [+]   — offset always starts at 0 (no change); +/- add
-            // or subtract directly onto the live scale, so it shrinks as easily as it grows. the value
-            // is a typable field, for the jump the step buttons would take all day to reach.
+            // one row per axis:  X   [-] 1.00 [+]   — starts at 1 (no change, same as the multiselect
+            // owner's own localScale); +/- add or subtract directly, so it shrinks as easily as it grows.
+            // the value is a typable field, for the jump the step buttons would take all day to reach.
             string[] axis = { "X", "Y", "Z" };
             float step = CreativeIncrements.Enabled ? CreativeIncrements.Step : 0.25f;
             float repeat = CreativeIncrements.Enabled ? CreativeIncrements.Speed : 0.05f;
@@ -416,8 +412,8 @@ namespace BetterFG.UI.Windows.Creative
                 int a = i;
                 MakeLabel(rows, new Rect(PAD, y, 16f, 20f), axis[i], FS_SM, WHITE);
                 _valFields[a] = UGUIShip.CreateIncrement(rows, new Rect(PAD + 20f, y, w - 20f, 20f),
-                    -OFFSET_LIMIT, OFFSET_LIMIT, () => _offsets[a], v => _offsets[a] = v, step,
-                    isFloat: true, wrap: false, fontSize: FS_SM, fmt: OffsetText,
+                    -FACTOR_LIMIT, FACTOR_LIMIT, () => _factors[a], v => _factors[a] = v, step,
+                    isFloat: true, wrap: false, fontSize: FS_SM, fmt: FactorText,
                     onChange: _ => ApplyScale(), holds: holds);
                 for (int h = 0; h < 2; h++)
                 {
@@ -451,16 +447,16 @@ namespace BetterFG.UI.Windows.Creative
         // live, no Apply press. Individual bakes into each object immediately, so it gets only this
         // session's share of the total (minus what previous commits already baked in). group modes set
         // the live owner's scale, which PERSISTS between holds until the game bakes it on deselect — so
-        // they always get the full running total (factor = 1+total, can cross 0 into negative).
+        // they always get the full running factor (can cross 1 into negative to mirror).
         private void ApplyScale()
         {
             _scaleEntry ??= BatchEditHistory.Begin("scale");
             var offset = _scaleMode == ScaleMode.Individual
                 ? new Vector3(
-                    _offsets[0] - _committedOffsets[0],
-                    _offsets[1] - _committedOffsets[1],
-                    _offsets[2] - _committedOffsets[2])
-                : new Vector3(_offsets[0], _offsets[1], _offsets[2]);
+                    _factors[0] - _committedFactors[0],
+                    _factors[1] - _committedFactors[1],
+                    _factors[2] - _committedFactors[2])
+                : new Vector3(_factors[0] - 1f, _factors[1] - 1f, _factors[2] - 1f);
             int n = BatchScale.ApplyInto(_scaleEntry, offset, _scaleMode);
             Status(n, "scaled");
         }
@@ -478,18 +474,18 @@ namespace BetterFG.UI.Windows.Creative
             _scaleRowsGroup.blocksRaycasts = ready;
         }
 
-        // resets the offset displays AND the committed baseline back to 0 — called on undo/redo (the
+        // resets the factor displays AND the committed baseline back to 1 — called on undo/redo (the
         // running total no longer matches whatever history just changed) and on a mode switch (the
         // total got baked in, so it's the new baseline). NOT called on commit: the number persists
         // across holds to show total scaling so far.
-        private void ResetOffsets()
+        private void ResetFactors()
         {
             for (int i = 0; i < 3; i++)
             {
-                _offsets[i] = 0f;
-                _committedOffsets[i] = 0f;
+                _factors[i] = 1f;
+                _committedFactors[i] = 1f;
                 // null on every subtab but Scale, and undo/redo can fire from any of them
-                if (_valFields[i] != null) UGUIShip.SetInputText(_valFields[i], OffsetText(0f), false);
+                if (_valFields[i] != null) UGUIShip.SetInputText(_valFields[i], FactorText(1f), false);
             }
         }
 
@@ -502,7 +498,7 @@ namespace BetterFG.UI.Windows.Creative
             if (_scaleEntry == null) return;
             BatchEditHistory.Push(_scaleEntry);
             _scaleEntry = null;
-            for (int i = 0; i < 3; i++) _committedOffsets[i] = _offsets[i];
+            for (int i = 0; i < 3; i++) _committedFactors[i] = _factors[i];
         }
 
         // ── material subtab ──────────────────────────────────────────────────
@@ -922,7 +918,7 @@ namespace BetterFG.UI.Windows.Creative
             if (_colourOriginals.Count == 0) return;
             var entry = BatchEditHistory.Begin(_recolourMode == RecolourMode.Modify ? "modify colour" : "recolour");
             foreach (var kv in _colourOriginals)
-                entry.Snaps.Add(new BatchEditHistory.ObjectSnap { Obj = kv.Key, Colour = kv.Value });
+                entry.Snaps.Add(new BatchEditHistory.ObjectSnap { Obj = kv.Key, Colour = kv.Value, Palette = BatchTargets.GetColourParam(kv.Key).CurrentPalette });
             _colourEntry = entry;
             _colourSessionSelCount = BatchRecolour.SelectionCount();
         }
@@ -970,7 +966,7 @@ namespace BetterFG.UI.Windows.Creative
         {
             CommitScaleEntry();
             BatchScale.BakeOwnerScale();
-            ResetOffsets();
+            ResetFactors();
             _scaleMode = (ScaleMode)(((int)_scaleMode + d + 4) % 4);
             RebuildContent();
         }
@@ -1001,7 +997,7 @@ namespace BetterFG.UI.Windows.Creative
             BatchScale.ResetOwnerScale(); // restores write straight to the objects — clear the live parent multiplier first
             string msg = BatchEditHistory.Undo();
             SetStatus(msg ?? "nothing to undo", msg != null ? OK_COL : HINT_COL);
-            ResetOffsets(); // reverted scale no longer matches the running total
+            ResetFactors(); // reverted scale no longer matches the running total
             RebuildContent(); // refresh undo/redo counters
         }
 
@@ -1011,7 +1007,7 @@ namespace BetterFG.UI.Windows.Creative
             BatchScale.ResetOwnerScale();
             string msg = BatchEditHistory.Redo();
             SetStatus(msg ?? "nothing to redo", msg != null ? OK_COL : HINT_COL);
-            ResetOffsets();
+            ResetFactors();
             RebuildContent();
         }
 
@@ -1022,7 +1018,7 @@ namespace BetterFG.UI.Windows.Creative
             ScaleMode.FromOrigin => "from 0,0,0", ScaleMode.Individual => "individual", ScaleMode.FromCenter => "from center", ScaleMode.FromSelected => "from selected", _ => "?"
         };
 
-        private static string OffsetText(float v) => (v > 0f ? "+" : "") + v.ToString("0.##");
+        private static string FactorText(float v) => v.ToString("0.##");
 
         private void Status(int n, string verb)
         {

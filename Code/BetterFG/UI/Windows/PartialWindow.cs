@@ -29,7 +29,7 @@ namespace BetterFG.UI.Windows
             var rt = link.rectTransform;
             rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
             rt.pivot = new Vector2(0f, 0.5f);
-            rt.anchoredPosition = new Vector2(_titleText.preferredWidth + PAD, 0f);
+            rt.anchoredPosition = new Vector2(UGUIShip.PreferredWidth(_titleText) + PAD, 0f);
         }
 
         private void GoBack()

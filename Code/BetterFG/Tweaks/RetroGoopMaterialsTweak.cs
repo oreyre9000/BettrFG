@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -97,8 +97,11 @@ namespace BetterFG.Tweaks
 
         internal static bool Apply(LevelEditorPlaceableObject lepo)
         {
+            // No ScheduleLavaSkin here. This runs on RegisterObject, so every object you drop was
+            // kicking SkinLava's whole-scene FindObjectsOfType<Renderer> sweep a second later, name
+            // marshalling every material in the level - seconds of freeze per placement. Lava visuals
+            // have their own trigger in RetroGoopLavaStartPatch; placing a block cannot make new ones.
             if (lepo == null) return false;
-            ScheduleLavaSkin();
             return Skin(lepo.transform, lepo.GetComponentInChildren<LevelEditorDrawableData>(true));
         }
 

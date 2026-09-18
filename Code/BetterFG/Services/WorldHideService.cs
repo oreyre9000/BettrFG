@@ -46,6 +46,7 @@ namespace BetterFG.Services
                 {
                     if (root == null || !root.activeSelf) continue;
                     if (root.name.StartsWith("BetterFG_") || root.name.StartsWith("BettrFG_")) continue;
+                    if (root.scene.name == "DontDestroyOnLoad") continue;
                     if (root.GetComponentInChildren<SoundBankLoadingListener>(true) != null) continue;
                     if (keepVisible != null && keepVisible(root)) continue;
                     root.SetActive(false);

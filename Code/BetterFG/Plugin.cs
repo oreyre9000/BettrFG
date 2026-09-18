@@ -7,6 +7,7 @@ using BetterFG.Network;
 using BetterFG.Patches;
 using BetterFG.Services;
 using BetterFG.Customization.Player;
+using BetterFG.Customization.TexturePacks;
 using BetterFG.Customization.Social;
 using BetterFG.UI;
 using BetterFG.UI.Components;
@@ -48,6 +49,7 @@ namespace BetterFG
             BugReportService.Init();
             BetterFGConfig.Init();
             AudioService.Init();
+            TexturePackRuntimeService.LoadFromSettingsOnStartup();
             LocalizationService.Init();
             BetterFG.Tweaks.StartupTitleScreenTweak.ForceOn =
                 SettingsService.Get(BetterFG.UI.BetterFGStartupWindow.KEY_SEEN, "false") != "true"
@@ -75,6 +77,13 @@ namespace BetterFG
             FallGuysLib.Game.LevelEditorEvents.OnLevelEditorPlaytest += BetterFG.Tweaks.BfgTweak.RaiseLevelEditorPlaytest;
             FallGuysLib.Game.LevelEditorEvents.OnLevelEditorPlaytestEnd += BetterFG.Tweaks.BfgTweak.RaiseLevelEditorPlaytestEnd;
             FallGuysLib.Game.LevelEditorEvents.OnLevelEditorPlaytest += () => BetterFG.Features.CustomizeFallGuys.FeatureCustomizeFallGuys.Refresh(true);
+
+            FallGuysLib.Round.RoundEvents.OnCleanupLoadingScreens += BetterFG.Features.UnityRound.BetterFGRoundPostmodifier.RefreezeAnimations;
+            FallGuysLib.Round.RoundEvents.OnPlayingStarted += BetterFG.Features.UnityRound.BetterFGRoundPostmodifier.StartAnimations;
+            FallGuysLib.Game.LevelEditorEvents.OnLevelEditorPlaytest += BetterFG.Features.UnityRound.BetterFGRoundPostmodifier.StartAnimations;
+            FallGuysLib.Game.LevelEditorEvents.OnLevelEditorPlaytestEnd += BetterFG.Features.UnityRound.BetterFGRoundPostmodifier.RefreezeAnimations;
+            FallGuysLib.Game.LevelEditorEvents.OnLevelEditorPlaytest += () => BetterFG.Features.UnityRound.Editor.UnityRoundLoader.SetPlaytesting(true);
+            FallGuysLib.Game.LevelEditorEvents.OnLevelEditorPlaytestEnd += () => BetterFG.Features.UnityRound.Editor.UnityRoundLoader.SetPlaytesting(false);
 
             // decode saved custom skin textures now, at load, so the first auto-reapply on menu enter
             // hits the cache instead of reading + decoding the whole png on that frame.
@@ -130,6 +139,7 @@ namespace BetterFG
             BetterFG.Utilities.PatchGate.ResetForRepatch();
             foreach (var type in Assembly.GetExecutingAssembly().GetTypes())
             {
+                if (BetterFG.Utilities.FeatureAvailability.Off(type.FullName)) continue;
                 if (BetterFG.Utilities.PatchGate.Claim(type)) continue;
                 try { new HarmonyLib.PatchClassProcessor(harmony, type).Patch(); }
                 catch (Exception ex) { Log.LogError($"Harmony: Failed to patch {type.FullName}: {ex.Message}"); }
@@ -157,6 +167,8 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<SkinLoaderService>();
             ClassInjector.RegisterTypeInIl2Cpp<SkinApplicationService>();
             ClassInjector.RegisterTypeInIl2Cpp<BeanMonitorService>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.SlimeColourDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.ThrusterBeamDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<PlayerScaleService>();
             ClassInjector.RegisterTypeInIl2Cpp<BeanVisualRig>();
             ClassInjector.RegisterTypeInIl2Cpp<CostumePollerComponent>();
@@ -168,12 +180,13 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<AssetManager>();
             ClassInjector.RegisterTypeInIl2Cpp<NetworkClient>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFGUnityRounds>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.UnityRound.UnityRoundCoreBillboard>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.UnityRound.Editor.CreativeRoundMemory>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CustomizeFallGuys.FallGuyEyeDriver>();
 
             ClassInjector.RegisterTypeInIl2Cpp<CustomEndzoneTrigger>();
-            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeGameMode.BfgGameModeRow>();
-            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CustomBackgrounds.BfgDisableBackgroundRow>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.BfgGameModeRow>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.BfgDisableBackgroundRow>();
 
             // ui
             ClassInjector.RegisterTypeInIl2Cpp<BetterFGUIMan>();
@@ -188,6 +201,7 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<HollowBoxPulse>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Onboarding.PromptHost>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Assets.UnityProjectPrompt>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Assets.BundleReaderPrompt>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Onboarding.OnboardingController>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.Onboarding.HelpPrompt>();
             ClassInjector.RegisterTypeInIl2Cpp<MoveScrollUvRaw>();
@@ -195,6 +209,7 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<LinkHover>();
             ClassInjector.RegisterTypeInIl2Cpp<StylizeGuard>();
             ClassInjector.RegisterTypeInIl2Cpp<RowLabelFit>();
+            ClassInjector.RegisterTypeInIl2Cpp<LoadingBar>();
             ClassInjector.RegisterTypeInIl2Cpp<SideWheelManager>();
             ClassInjector.RegisterTypeInIl2Cpp<RingHoleGraphic>();
             ClassInjector.RegisterTypeInIl2Cpp<AutoFetchTrigger>();
@@ -233,6 +248,8 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<SkinTextureWizardTab>();
             ClassInjector.RegisterTypeInIl2Cpp<SkinTextureMaterialPropsTab>();
             ClassInjector.RegisterTypeInIl2Cpp<AssetsTab>();
+            ClassInjector.RegisterTypeInIl2Cpp<TexturePacksTab>();
+            ClassInjector.RegisterTypeInIl2Cpp<TexturePackScreen>();
             ClassInjector.RegisterTypeInIl2Cpp<AssetsScreen>();
             ClassInjector.RegisterTypeInIl2Cpp<AllCosmeticsTab>();
             ClassInjector.RegisterTypeInIl2Cpp<AllCosmeticsWizardTab>();
@@ -274,10 +291,11 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.UI.Windows.Creative.BatchEditWindow>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.UI.Windows.Creative.PublishThumbnailWindow>();
             ClassInjector.RegisterTypeInIl2Cpp<BetterFG.UI.Windows.Creative.CreativeSelectionWatcher>();
-            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.LevelPort.LevelBrowserPortPrompt>();
-            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CopyCode.CopyCodePrompt>();
-            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CustomIntroCams.IntroCamPreview>();
-            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.PasteCode.PasteCodePrompt>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.LevelBrowserPortPrompt>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.CopyCodePrompt>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.IntroCamPreview>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.CreativeExpansion.PasteCodePrompt>();
+            ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Customization.Social.EmoticonLockerPrompt>();
             ClassInjector.RegisterTypeInIl2Cpp<WindowDragHandle>();
             ClassInjector.RegisterTypeInIl2Cpp<TweaksWindow>();
             ClassInjector.RegisterTypeInIl2Cpp<Background3dWindow>();
@@ -317,6 +335,9 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<LobbyShowSearchTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<LobbyCustomiserTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<DisableCameraAssistTweak>();
+            ClassInjector.RegisterTypeInIl2Cpp<CustomCameraTweak>();
+            ClassInjector.RegisterTypeInIl2Cpp<CameraOptionRow>();
+            ClassInjector.RegisterTypeInIl2Cpp<DisableStepAssistTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<CinematicSpectatorTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<CreativeIntroCameraTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<ObjectiveRoundNumberTweak>();
@@ -327,6 +348,7 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<ShowServerInfoTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<DisableAgeRatingPopupTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<ShowTilePlaysTweak>();
+            ClassInjector.RegisterTypeInIl2Cpp<ShowTileDislikesTweak>();
             //ClassInjector.RegisterTypeInIl2Cpp<MultiShowSelectTweak>(); // WIP, shelved (see TweakRegistry)
             ClassInjector.RegisterTypeInIl2Cpp<ShadowDistanceTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<ShadowCustomResolutionTweak>();
@@ -343,6 +365,7 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<UpcomingShowsTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<RandomShowSelectTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<RetroGoopMaterialsTweak>();
+            ClassInjector.RegisterTypeInIl2Cpp<PlaytestTrailTweak>();
             //ClassInjector.RegisterTypeInIl2Cpp<BetterFG.Features.WinStreakDebug.WinStreakDebugService>();
         }
 
@@ -354,14 +377,16 @@ namespace BetterFG
             Spawn<BetterFGUnityRounds>("BetterFG_UnityRounds", persist: true);
             Spawn<BetterFG.Features.UnityRound.Editor.CreativeRoundMemory>("BetterFG_CreativeRoundMemory", persist: true);
             Spawn<BetterFG.UI.Windows.Creative.CreativeSelectionWatcher>("BetterFG_CreativeSelectionWatcher", persist: true);
-            Spawn<BetterFG.Features.LevelPort.LevelBrowserPortPrompt>("BetterFG_LevelBrowserPortPrompt", persist: true);
-            Spawn<BetterFG.Features.CopyCode.CopyCodePrompt>("BetterFG_CopyCodePrompt", persist: true);
-            Spawn<BetterFG.Features.CustomIntroCams.IntroCamPreview>("BetterFG_IntroCamPreview", persist: true);
-            Spawn<BetterFG.Features.PasteCode.PasteCodePrompt>("BetterFG_PasteCodePrompt", persist: true);
+            Spawn<BetterFG.Features.CreativeExpansion.LevelBrowserPortPrompt>("BetterFG_LevelBrowserPortPrompt", persist: true);
+            Spawn<BetterFG.Features.CreativeExpansion.CopyCodePrompt>("BetterFG_CopyCodePrompt", persist: true);
+            Spawn<BetterFG.Features.CreativeExpansion.IntroCamPreview>("BetterFG_IntroCamPreview", persist: true);
+            Spawn<BetterFG.Features.CreativeExpansion.PasteCodePrompt>("BetterFG_PasteCodePrompt", persist: true);
+            Spawn<BetterFG.Customization.Social.EmoticonLockerPrompt>("BetterFG_EmoticonLockerPrompt", persist: true);
             Spawn<BetterFG.Features.CustomizeFallGuys.FallGuyEyeDriver>("BetterFG_FallGuyEyes", persist: true);
             Spawn<BetterFG.Features.Onboarding.OnboardingController>("BetterFG_Onboarding", persist: true);
 
             Spawn<BeanMonitorService>("BetterFG_BeanMonitor", persist: false);
+            Spawn<BetterFG.Features.CreativeExpansion.SlimeColourDriver>("BetterFG_SlimeColour", persist: false);
             Spawn<BetterFG.Customization.Pets.PetService>("BetterFG_PetService", persist: true);
             Spawn<BetterFG.Customization.Pets.RemotePetService>("BetterFG_RemotePetService", persist: true);
 
@@ -369,9 +394,17 @@ namespace BetterFG
 
             TweakRegistry.Init();
 
-            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CustomLights.CustomLightIdentifier());
-            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CustomBackgrounds.ThemeIdentifier());
-            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CustomIntroCams.CustomIntroCamIdentifier());
+            BetterFG.Features.Colourblind.ColourblindOptions.Apply();
+
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CreativeExpansion.CustomLightIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CreativeExpansion.ThemeIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CreativeExpansion.CustomIntroCamIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CreativeExpansion.RuleColourIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CreativeExpansion.SlimeColourIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CreativeExpansion.ObjectThemeIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.CreativeExpansion.ThrusterIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.UnityRound.UnityRoundCoreIdentifier());
+            BetterFG.Utilities.IdentifierObjectRegistry.Register(new BetterFG.Features.UnityRound.UnityRoundAnchorIdentifier());
 
             var svcGo = new GameObject("BetterFG_CustomizationServices");
             svcGo.hideFlags = HideFlags.HideAndDontSave;
@@ -415,6 +448,7 @@ namespace BetterFG
             BetterFGTabRegistry.Register<FeaturesTab>();
             BetterFGTabRegistry.Register<CustomSkinTextureTab>();
             BetterFGTabRegistry.Register<AssetsTab>();
+            BetterFGTabRegistry.Register<TexturePacksTab>();
             BetterFGTabRegistry.Register<AllCosmeticsTab>();
             BetterFGTabRegistry.Register<CreativeTab>();
             BetterFGTabRegistry.Register<PersonalBestTab>();
@@ -456,6 +490,7 @@ namespace BetterFG
 
         private static T Spawn<T>(string name, bool persist) where T : MonoBehaviour
         {
+            if (BetterFG.Utilities.FeatureAvailability.Off(typeof(T).Name)) return null;
             var go = new GameObject(name);
             go.hideFlags = HideFlags.HideAndDontSave;
             if (persist) UnityEngine.Object.DontDestroyOnLoad(go);

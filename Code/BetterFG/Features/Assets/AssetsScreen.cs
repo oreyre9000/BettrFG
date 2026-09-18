@@ -3,9 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
 using BetterFG.Customization.Player;
+using BetterFG.Customization.UI;
 using BetterFG.Features.Replay;
 using BetterFG.Features.TimePlacement;
 using BetterFG.Services;
+using static BetterFG.Services.AddressablesCatalogService;
 using BetterFG.UI;
 using BetterFG.Utilities;
 using BettrFG.uGUI;
@@ -15,6 +17,7 @@ using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.AddressableAssets.ResourceLocators;
 using UnityEngine.ResourceManagement.AsyncOperations;
+using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using LayoutElement = UnityEngine.UI.LayoutElement;
@@ -30,27 +33,35 @@ namespace BetterFG.Features.Assets
         private const int BackdropOrder = 500;
         private const int ContentOrder = 501;
 
-        private static readonly Color BACKDROP = new Color(0.10f, 0.11f, 0.13f, 1f);
+        private static readonly Color BACKDROP = Color.black;
         private static readonly Color WHITE = UGUIShip.WHITE;
         private static readonly Color HINT = new Color(1f, 1f, 1f, 0.35f);
         private static readonly Color BTN_DARK = UGUIShip.BTN_DARK;
         private static readonly Color BTN_BLUE = new Color(0.22f, 0.34f, 0.55f, 1f);
         private static readonly Color CHECK = new Color(1f, 0.85f, 0.2f, 1f);
         private static readonly Color BAR_FILL = new Color(0.30f, 0.62f, 0.34f, 1f);
+        private static readonly Color ROW_ALT = new Color(0.27f, 0.27f, 0.29f, 1f);
+        private static readonly Color ROW_SEL = new Color(0.25f, 0.5f, 0.25f, 1f);
+        private const float ROW_GAP = 2f;
 
         private Canvas _backdropCanvas, _canvas;
-        private RectTransform _root;
+        private RectTransform _root, _content;
 
         private InputField _searchField;
-        private RectTransform _listContent;
+        private RectTransform _listContent, _listRoot;
         private Text _status;
+        private float _listPadTop, _curveCenterY, _curveR, _maxShift, _listH, _scrollVel;
+        private int _selfScrollFrame = -1;
+        private readonly List<RectTransform> _rowBodies = new List<RectTransform>();
+        private readonly List<float> _rowCenters = new List<float>();
+        private readonly List<bool> _rowVisible = new List<bool>();
 
         private const int PAGES = 10;
         private bool _everything, _rounds;
         private int _page;
         private Text _pageCarousel;
         private GameObject _pageRow, _barRow;
-        private RectTransform _bar;
+        private LoadingBar _bar;
         private readonly Button[] _modeBtns = new Button[3];
         private Button _sortBtn;
         private int _kind;
@@ -69,8 +80,10 @@ namespace BetterFG.Features.Assets
         private int _previewIdx = -1;
         private bool _busy;
 
-        private RawImage _previewImg;
+        private RawImage _previewImg, _stageImg;
         private RectTransform _previewRt;
+        private GameObject _previewPanel, _previewHint;
+        private Vector2 _statusPanelPos, _statusStagePos;
         private RenderTexture _rt;
         private Camera _cam;
         private Light[] _lights;
@@ -113,7 +126,9 @@ namespace BetterFG.Features.Assets
 
             try
             {
-                HideGame();
+                WorldHideService.HideCanvases(this);
+                BetterFGUIMan.Instance?.SetVisibleForced(false);
+                if (BetterFGUIMan.Instance != null) BetterFGUIMan.Instance.VisibilityLocked = true;
                 Build();
             }
             catch (System.Exception ex)
@@ -143,18 +158,26 @@ namespace BetterFG.Features.Assets
             }
             catch (System.Exception ex) { Plugin.Log.LogError($"assets screen teardown threw: {ex}"); }
 
-            ShowGame();
+            WorldHideService.Show(this);
+            RestoreBettrFGUi();
             Instance = null;
 
             yield return StartCoroutine(LoadingScreenService.HideRoutine().WrapToIl2Cpp());
             Destroy(gameObject);
         }
 
-        private void OnDestroy() => WorldHideService.Show(this);
+        private static void RestoreBettrFGUi()
+        {
+            if (BetterFGUIMan.Instance == null) return;
+            BetterFGUIMan.Instance.VisibilityLocked = false;
+            BetterFGUIMan.Instance.SetVisibleForced(true);
+        }
 
-        private void HideGame() => WorldHideService.HideCanvases(this);
-
-        private void ShowGame() => WorldHideService.Show(this);
+        private void OnDestroy()
+        {
+            WorldHideService.Show(this);
+            RestoreBettrFGUi();
+        }
 
         private void Build()
         {
@@ -169,6 +192,7 @@ namespace BetterFG.Features.Assets
             var bimg = bg.AddComponent<Image>();
             bimg.color = BACKDROP;
             bimg.raycastTarget = true;
+            BuildFallForceBackdrop(brt);
 
             _canvas = UGUIShip.CreateCanvas("BettrFG_AssetsScreen");
             _canvas.sortingOrder = ContentOrder;
@@ -180,118 +204,117 @@ namespace BetterFG.Features.Assets
             _root.anchorMax = Vector2.one;
             _root.offsetMin = _root.offsetMax = Vector2.zero;
 
+            var contentGo = new GameObject("Content");
+            contentGo.transform.SetParent(_root, false);
+            _content = contentGo.AddComponent<RectTransform>();
+            _content.anchorMin = Vector2.zero;
+            _content.anchorMax = Vector2.one;
+            _content.offsetMin = _content.offsetMax = Vector2.zero;
+
             var refRes = UIScaleService.CurrentRef;
-            float winW = refRes.x * 0.66f, winH = refRes.y * 0.72f;
-            float ox = (refRes.x - winW) * 0.5f, oy = (refRes.y - winH) * 0.5f;
+            float W = refRes.x, H = refRes.y;
 
-            float gap = 16f, barH = 20f, statusH = 16f;
-            float top = oy + barH + 10f;
-            float panelH = winH - barH - 10f - statusH - 10f;
-            float panelW = (winW - gap) * 0.5f;
+            float edge = W * 0.045f;
+            _listW = W * 0.295f;
+            _maxShift = W * 0.0425f;
+            float listRight = W - edge;
+            float listX = listRight - _listW;
+            _curveCenterY = H * 0.55f;
+            _curveR = (_curveCenterY * _curveCenterY + _maxShift * _maxShift) / (2f * _maxShift);
+            float gradH = H * 0.233f;
+            _listPadTop = gradH;
 
-            UGUIShip.CreateActionDropdown(_root, new Rect(ox, oy, 56f, barH), "assets.file",
+            var scroll = UGUIShip.CreateScrollView(_content, new Rect(listX - _maxShift, 0f, _listW + _maxShift, H));
+            var vp = scroll.scrollRect.viewport;
+            vp.offsetMin = vp.offsetMax = Vector2.zero;
+            scroll.scrollRect.verticalScrollbar = null;
+            scroll.scrollRect.scrollSensitivity = 0f;
+            scroll.scrollRect.inertia = true;
+            scroll.scrollRect.decelerationRate = 0.12f;
+            Destroy(scroll.scrollRect.transform.Find("Scrollbar").gameObject);
+            scroll.scrollRect.onValueChanged.AddListener(new Action<Vector2>(OnListScrolled));
+            _listContent = scroll.content;
+            _listRoot = scroll.scrollRect.GetComponent<RectTransform>();
+            _listH = H;
+
+            UGUIShip.CreateGradientPanel(_content, new Rect(W * 0.575f, 0f, W * 0.415f, gradH),
+                new Color(0f, 0f, 0f, 1f), new Color(0f, 0f, 0f, 0f));
+
+            float titleH = 22f, rowH = 20f, titleY = H * 0.045f;
+            float fileW = 56f, selectW = 66f, optionsW = 72f, menuGap = 4f;
+            float menusW = fileW + selectW + optionsW + menuGap * 2f;
+            float menuX = listRight - _listW * 0.9f;
+            UGUIShip.CreateActionDropdown(_content, new Rect(menuX, titleY + 1f, fileW, rowH), "assets.file",
                 new List<string> { "assets.export_selected", "assets.exit" },
-                i => { if (i == 0) ExportSelected(); else Close(); }, UIScale.FS_SM, barH);
-
-            UGUIShip.CreateActionDropdown(_root, new Rect(ox + 60f, oy, 66f, barH), "assets.select",
+                i => { if (i == 0) ExportSelected(); else Close(); }, UIScale.FS_SM, rowH);
+            UGUIShip.CreateActionDropdown(_content, new Rect(menuX + fileW + menuGap, titleY + 1f, selectW, rowH), "assets.select",
                 new List<string> { "assets.select_all_in_search", "assets.unselect_all" },
-                i => { if (i == 0) SelectAllInSearch(); else UnselectAll(); }, UIScale.FS_SM, barH);
-
-            UGUIShip.CreateActionDropdown(_root, new Rect(ox + 130f, oy, 72f, barH), "assets.options",
+                i => { if (i == 0) SelectAllInSearch(); else UnselectAll(); }, UIScale.FS_SM, rowH);
+            UGUIShip.CreateActionDropdown(_content, new Rect(menuX + fileW + selectW + menuGap * 2f, titleY + 1f, optionsW, rowH), "assets.options",
                 new List<string> { "assets.configure_project" },
-                i => UnityProjectPrompt.Open(), UIScale.FS_SM, barH);
+                i => UnityProjectPrompt.Open(), UIScale.FS_SM, rowH);
+            var title = UGUIShip.CreateLabel(_content, new Rect(menuX + menusW + 8f, titleY, listRight - menuX - menusW - 8f, titleH),
+                "asset_export.tab_title", UIScale.FS_TITLE, WHITE, TextAnchor.MiddleRight);
+            title.fontStyle = FontStyle.Bold;
 
-            var left = Panel(new Rect(ox, top, panelW, panelH));
-            var right = Panel(new Rect(ox + panelW + gap, top, panelW, panelH));
-
-            BuildLeft(left, panelW, panelH);
-            BuildRight(right, panelW, panelH);
-
-            _status = UGUIShip.CreateLabel(_root, new Rect(ox, top + panelH + 10f, winW, statusH),
-                "", UIScale.FS_SM, HINT, TextAnchor.MiddleLeft);
-        }
-
-        private RectTransform Panel(Rect rect)
-        {
-            var go = new GameObject("Panel");
-            go.transform.SetParent(_root, false);
-            var rt = go.AddComponent<RectTransform>();
-            UGUIShip.SetPixelRect(rt, rect);
-            UGUIShip.ApplyDeluxPanel(go.AddComponent<Image>(), 1.4f);
-            return rt;
-        }
-
-        private void BuildLeft(RectTransform panel, float w, float h)
-        {
-            float p = 11f, bw = (w - p * 4f) / 3f, cy = p;
-
-            _modeBtns[0] = UGUIShip.CreateButton(panel, new Rect(p, cy, bw, 20f),
+            float modeY = H * 0.095f, modeH = H * 0.033f, searchW = W * 0.27f, searchX = listRight - searchW;
+            float bw = (searchW - 8f) / 3f;
+            _modeBtns[0] = UGUIShip.CreateButton(_content, new Rect(searchX, modeY, bw, modeH),
                 "assets.cosmetics", BTN_BLUE, WHITE, UIScale.FS_SM, new Action(PickCosmetics));
-            _modeBtns[1] = UGUIShip.CreateButton(panel, new Rect(p * 2f + bw, cy, bw, 20f),
+            _modeBtns[1] = UGUIShip.CreateButton(_content, new Rect(searchX + bw + 4f, modeY, bw, modeH),
                 "assets.rounds", BTN_DARK, WHITE, UIScale.FS_SM, new Action(PickRounds));
-            _modeBtns[2] = UGUIShip.CreateButton(panel, new Rect(p * 3f + bw * 2f, cy, bw, 20f),
+            _modeBtns[2] = UGUIShip.CreateButton(_content, new Rect(searchX + bw * 2f + 8f, modeY, bw, modeH),
                 "assets.everything", BTN_DARK, WHITE, UIScale.FS_SM, new Action(PickEverything));
             HighlightMode(0);
-            cy += 20f + 5f;
 
-            float searchBtnW = 52f, sortW = 62f;
-            _searchField = UGUIShip.CreateInputField(panel, new Rect(p, cy, w - p * 2f - searchBtnW - sortW - 8f, 19f),
-                "assets.search_hint", Color.black, WHITE, UIScale.FS_SM);
+            float searchY = modeY + modeH + 6f, searchH = modeH, searchBtnW = 52f, sortW = 62f;
+            _searchField = UGUIShip.CreateInputField(_content, new Rect(searchX, searchY, searchW - searchBtnW - sortW - 8f, searchH),
+                "assets.search_hint", Color.black, WHITE, UIScale.FS);
             _searchField.onEndEdit.AddListener(new Action<string>(v => Search()));
-            UGUIShip.CreateButton(panel, new Rect(w - p - searchBtnW - sortW - 4f, cy, searchBtnW, 19f),
+            UGUIShip.CreateButton(_content, new Rect(listRight - sortW - 4f - searchBtnW, searchY, searchBtnW, searchH),
                 "assets.search", BTN_DARK, WHITE, UIScale.FS_SM, new Action(Search));
-            _sortBtn = UGUIShip.CreateActionDropdown(panel, new Rect(w - p - sortW, cy, sortW, 19f),
-                "assets.sort", new List<string>
-                {
-                    "assets.kind_all", "assets.kind_audio", "assets.kind_prefab",
-                    "assets.kind_mesh", "assets.kind_texture", "assets.kind_material",
-                },
-                new Action<int>(PickKind), UIScale.FS_SM, 19f);
-            cy += 19f + 5f;
+            _sortBtn = UGUIShip.CreateActionDropdown(_content, new Rect(listRight - sortW, searchY, sortW, searchH),
+                "assets.sort", new List<string>(KIND_IDS), new Action<int>(PickKind), UIScale.FS_SM, searchH);
 
+            float pageY = searchY + searchH + 6f;
             _pageRow = new GameObject("PageRow");
-            _pageRow.transform.SetParent(panel, false);
+            _pageRow.transform.SetParent(_content, false);
             var pageRt = _pageRow.AddComponent<RectTransform>();
-            UGUIShip.SetPixelRect(pageRt, new Rect(p, cy, w - p * 2f, 18f));
-            _pageCarousel = UGUIShip.CreateCarousel(pageRt, new Rect(0f, 0f, w - p * 2f, 18f),
+            UGUIShip.SetPixelRect(pageRt, new Rect(searchX, pageY, searchW, 18f));
+            _pageCarousel = UGUIShip.CreateCarousel(pageRt, new Rect(0f, 0f, searchW, 18f),
                 PageLabels(), 0, new Action<int>(StepPage), BTN_DARK, UIScale.FS_SM);
-            cy += 18f + 5f;
-
-            _bar = UGUIShip.CreateDeluxBar(panel, new Rect(p, cy, w - p * 2f, 12f), BAR_FILL);
-            _barRow = _bar.parent.gameObject;
-            _barRow.SetActive(false);
-            cy += 12f + 5f;
-
-            _listW = w - p * 2f - 14f;
-            var scroll = UGUIShip.CreateScrollView(panel, new Rect(p, cy, w - p * 2f, h - cy - p));
-            _listContent = scroll.content;
-            var layout = _listContent.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-            layout.spacing = 0f;
-            _listContent.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
             _pageRow.SetActive(false);
-        }
 
-        private static string[] PageLabels()
-        {
-            var labels = new string[PAGES];
-            for (int i = 0; i < PAGES; i++) labels[i] = LocalizationService.Format("assets.page", i + 1, PAGES);
-            return labels;
-        }
+            _bar = UGUIShip.CreateLoadingBar(_content, new Rect(searchX, pageY + 18f + 5f, searchW, 12f), BAR_FILL);
+            _barRow = _bar.gameObject;
+            _barRow.SetActive(false);
 
-        private void BuildRight(RectTransform panel, float w, float h)
-        {
+            float pvW = W * 0.29f, pvH = H * 0.514f, pvX = W * 0.075f, pvY = H * 0.233f;
+            _previewHint = UGUIShip.CreateLabel(_content, new Rect(pvX, pvY - titleH - 8f, pvW, titleH),
+                "assets.preview_hint", UIScale.FS_SM, HINT, TextAnchor.MiddleLeft).gameObject;
+
+            var stageGo = new GameObject("Stage");
+            stageGo.transform.SetParent(_content, false);
+            _previewRt = stageGo.AddComponent<RectTransform>();
+            UGUIShip.SetPixelRect(_previewRt, new Rect(0f, 0f, listX - _maxShift, H));
+            _stageImg = stageGo.AddComponent<RawImage>();
+            _stageImg.color = Color.clear;
+            _stageImg.raycastTarget = false;
+            stageGo.SetActive(false);
+
+            _previewPanel = new GameObject("Preview");
+            _previewPanel.transform.SetParent(_content, false);
+            var panelRt = _previewPanel.AddComponent<RectTransform>();
+            UGUIShip.SetPixelRect(panelRt, new Rect(pvX, pvY, pvW, pvH));
+            UGUIShip.ApplyDeluxPanel(_previewPanel.AddComponent<Image>(), 1.4f);
+
             float p = 11f;
-            var go = new GameObject("Preview");
-            go.transform.SetParent(panel, false);
-            float hintH = 18f;
-            _previewRt = go.AddComponent<RectTransform>();
-            UGUIShip.SetPixelRect(_previewRt, new Rect(p, p, w - p * 2f, h - p * 2f - hintH - 4f));
+            var go = new GameObject("Render");
+            go.transform.SetParent(panelRt, false);
+            UGUIShip.SetPixelRect(go.AddComponent<RectTransform>(), new Rect(p, p, pvW - p * 2f, pvH - p * 2f));
             go.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
 
-            var rawGo = new GameObject("Render");
+            var rawGo = new GameObject("Image");
             rawGo.transform.SetParent(go.transform, false);
             var rrt = rawGo.AddComponent<RectTransform>();
             rrt.anchorMin = Vector2.zero;
@@ -301,30 +324,136 @@ namespace BetterFG.Features.Assets
             _previewImg.color = Color.clear;
             _previewImg.raycastTarget = false;
 
-            UGUIShip.CreateLabel(panel, new Rect(p, h - p - hintH, w - p * 2f, hintH),
-                "assets.preview_hint", UIScale.FS_SM, HINT, TextAnchor.MiddleLeft);
-
             _soundPanel = new GameObject("SoundList");
-            _soundPanel.transform.SetParent(panel, false);
+            _soundPanel.transform.SetParent(panelRt, false);
             var srt = _soundPanel.AddComponent<RectTransform>();
-            UGUIShip.SetPixelRect(srt, new Rect(p, p, w - p * 2f, h - p * 2f - hintH - 4f));
+            UGUIShip.SetPixelRect(srt, new Rect(p, p, pvW - p * 2f, pvH - p * 2f));
+            _soundW = pvW - p * 2f;
 
-            float listH = h - p * 2f - hintH - 4f - TRANSPORT_H - 6f;
-            var sscroll = UGUIShip.CreateScrollView(srt, new Rect(0f, 0f, w - p * 2f, listH));
+            float listH = pvH - p * 2f - TRANSPORT_H - 6f;
+            var sscroll = UGUIShip.CreateScrollView(srt, new Rect(0f, 0f, _soundW, listH));
             _soundContent = sscroll.content;
             var slayout = _soundContent.gameObject.AddComponent<VerticalLayoutGroup>();
             slayout.childForceExpandWidth = true;
             slayout.childForceExpandHeight = false;
             slayout.spacing = 0f;
             _soundContent.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            BuildTransport(srt, w - p * 2f, listH + 4f);
+            BuildTransport(srt, _soundW, listH + 4f);
             _soundPanel.SetActive(false);
 
+            _status = UGUIShip.CreateLabel(_content, new Rect(pvX, pvY + pvH + 8f, pvW, 16f),
+                "", UIScale.FS_SM, HINT, TextAnchor.MiddleLeft);
+            _statusPanelPos = _status.rectTransform.anchoredPosition;
+            _statusStagePos = new Vector2(pvX, -(H - 16f - 12f));
+        }
+
+        private void ShowStage(bool on)
+        {
+            _previewRt.gameObject.SetActive(on);
+            _previewPanel.SetActive(!on);
+            _previewHint.SetActive(!on);
+            _status.rectTransform.anchoredPosition = on ? _statusStagePos : _statusPanelPos;
+        }
+
+        private void BuildFallForceBackdrop(RectTransform backdrop)
+        {
+            var source = ScreenBackgroundService.FindPreviewSource(ScreenBackgroundService.Screen.FinalRound);
+            if (source == null) { Plugin.Log.LogInfo("no final round background to clone for the assets screen, staying black"); return; }
+
+            var clone = Instantiate(source.gameObject, backdrop, false);
+            clone.name = "FallForceClone";
+            clone.SetActive(true);
+            foreach (var anim in clone.GetComponentsInChildren<Animator>(true)) anim.enabled = false;
+            foreach (var img in clone.GetComponentsInChildren<Image>(true)) { img.raycastTarget = false; img.maskable = false; }
+
+            var refRes = UIScaleService.CurrentRef;
+            Vector2 nat = source.GetComponent<RectTransform>().sizeDelta;
+            if (nat.x <= 1f || nat.y <= 1f) nat = new Vector2(1920f, 1080f);
+            float fit = Mathf.Max(refRes.x / nat.x, refRes.y / nat.y);
+            var crt = clone.GetComponent<RectTransform>();
+            crt.anchorMin = crt.anchorMax = crt.pivot = new Vector2(0.5f, 0.5f);
+            crt.sizeDelta = nat;
+            crt.anchoredPosition = Vector2.zero;
+            crt.localScale = new Vector3(fit, fit, 1f);
+            crt.localRotation = Quaternion.identity;
+
+            var circles = ScreenBackgroundService.FindCirclesChild(clone.transform)?.GetComponent<Image>();
+            if (circles != null && circles.material != null)
+            {
+                var mat = new Material(circles.material);
+                circles.material = mat;
+                if (mat.HasProperty("_OriginOffset")) mat.SetVector("_OriginOffset", new Vector4(0.22f, 0.5f, 0f, 0f));
+            }
+
+            var dim = new GameObject("Dim");
+            dim.transform.SetParent(backdrop, false);
+            var drt = dim.AddComponent<RectTransform>();
+            drt.anchorMin = Vector2.zero;
+            drt.anchorMax = Vector2.one;
+            drt.offsetMin = drt.offsetMax = Vector2.zero;
+            var dimg = dim.AddComponent<Image>();
+            dimg.color = new Color(0f, 0f, 0f, 0.45f);
+            dimg.raycastTarget = false;
+        }
+
+        private void OnListScrolled(Vector2 _)
+        {
+            if (Time.frameCount != _selfScrollFrame) _scrollVel = 0f;
+            ApplyCurve();
+        }
+
+        private float MaxScroll() => Mathf.Max(0f, _listContent.sizeDelta.y - _listH);
+
+        private void TickSmoothScroll()
+        {
+            if (_listContent == null) return;
+            float wheel = Input.mouseScrollDelta.y;
+            if (wheel != 0f && RectTransformUtility.RectangleContainsScreenPoint(_listRoot, Input.mousePosition))
+                _scrollVel -= wheel * 800f;
+            if (Mathf.Abs(_scrollVel) < 1f) { _scrollVel = 0f; return; }
+
+            float dt = Time.unscaledDeltaTime;
+            float next = Mathf.Clamp(_listContent.anchoredPosition.y + _scrollVel * dt, 0f, MaxScroll());
+            if (next <= 0f || next >= MaxScroll()) _scrollVel = 0f;
+            else _scrollVel *= Mathf.Exp(-6f * dt);
+            _selfScrollFrame = Time.frameCount;
+            _listContent.anchoredPosition = new Vector2(_listContent.anchoredPosition.x, next);
+            ApplyCurve();
+        }
+
+        private void ApplyCurve()
+        {
+            float s = _listContent.anchoredPosition.y;
+            float lo = s - 60f, hi = s + _listH + 60f;
+            for (int i = 0; i < _rowBodies.Count; i++)
+            {
+                float c = _rowCenters[i];
+                bool vis = c > lo && c < hi;
+                if (vis != _rowVisible[i])
+                {
+                    _rowVisible[i] = vis;
+                    _rowBodies[i].gameObject.SetActive(vis);
+                }
+                if (!vis) continue;
+                float dy = c - s - _curveCenterY;
+                float shift = _curveR - Mathf.Sqrt(Mathf.Max(0f, _curveR * _curveR - dy * dy));
+                var pos = _rowBodies[i].anchoredPosition;
+                pos.x = _maxShift - shift;
+                _rowBodies[i].anchoredPosition = pos;
+            }
+        }
+
+        private static string[] PageLabels()
+        {
+            var labels = new string[PAGES];
+            for (int i = 0; i < PAGES; i++) labels[i] = LocalizationService.Format("assets.page", i + 1, PAGES);
+            return labels;
         }
 
         private const float TRANSPORT_H = 26f;
 
-        private RectTransform _seek, _seekTrack;
+        private RectTransform _seek;
+        private LoadingBar _seekTrack;
         private Text _nowPlaying, _timeLbl;
         private Texture2D _texPlay, _texPause;
 
@@ -349,7 +478,7 @@ namespace BetterFG.Features.Assets
 
             float timeW = 74f;
             float barX = 64f;
-            _seekTrack = UGUIShip.CreateDeluxBar(parent,
+            _seekTrack = UGUIShip.CreateLoadingBar(parent,
                 new Rect(barX, y + 8f, w - barX - timeW - 4f, 10f), BAR_FILL);
 
             var hit = UGUIShip.CreateButton(parent, new Rect(barX, y + 4f, w - barX - timeW - 4f, 18f), "",
@@ -424,12 +553,12 @@ namespace BetterFG.Features.Assets
             if (_seekTrack == null) return;
             if (_stream == null)
             {
-                UGUIShip.SetDeluxBarProgress(_seekTrack, 0f);
+                _seekTrack.Set(0f);
                 return;
             }
             float now = (float)_stream.CurrentTime.TotalSeconds;
             float total = (float)_stream.TotalTime.TotalSeconds;
-            UGUIShip.SetDeluxBarProgress(_seekTrack, total > 0f ? now / total : 0f);
+            _seekTrack.Set(total > 0f ? now / total : 0f);
             if (_timeLbl != null) UGUIShip.RelabelText(_timeLbl, Clock(now) + " / " + Clock(total));
         }
 
@@ -439,7 +568,7 @@ namespace BetterFG.Features.Assets
         private NAudio.Wave.RawSourceWaveStream _stream;
         private readonly List<FmodSample> _samples = new List<FmodSample>();
         private string _bankName = "";
-        private float _listW = 400f;
+        private float _listW = 400f, _soundW = 400f;
 
         private void ClearSounds()
         {
@@ -499,7 +628,7 @@ namespace BetterFG.Features.Assets
 
         private void BuildSoundRows()
         {
-            float rowH = 22f;
+            float rowH = 22f * UIScale.S;
             for (int i = 0; i < _samples.Count; i++)
             {
                 int idx = i;
@@ -519,12 +648,12 @@ namespace BetterFG.Features.Assets
                 rowBtn.onClick.AddListener(new Action(() => PlaySample(idx)));
                 UGUIShip.PaintListRow(rowBtn, i, false);
 
-                UGUIShip.CreateButton(rowGo.transform, new Rect(4f, 3f, 34f, 16f),
+                UGUIShip.CreateButton(rowGo.transform, new Rect(4f, (rowH - 16f) * 0.5f, 34f, 16f),
                     "assets.play", BTN_BLUE, WHITE, UIScale.FS_SM, new Action(() => PlaySample(idx)));
-                UGUIShip.CreateButton(rowGo.transform, new Rect(42f, 3f, 44f, 16f),
+                UGUIShip.CreateButton(rowGo.transform, new Rect(42f, (rowH - 16f) * 0.5f, 44f, 16f),
                     "assets.save_mp3", BTN_DARK, WHITE, UIScale.FS_SM, new Action(() => SaveSample(idx)));
 
-                float availW = Mathf.Max(80f, _listW - 92f);
+                float availW = Mathf.Max(80f, _soundW - 92f);
                 var lbl = UGUIShip.CreateLabel(rowGo.transform, new Rect(92f, 0f, availW, rowH),
                     $"{s.Name}   {s.Seconds:0.00}s  {s.Channels}ch {s.Rate}Hz",
                     UIScale.FS_SM, WHITE, TextAnchor.MiddleLeft);
@@ -654,17 +783,17 @@ namespace BetterFG.Features.Assets
         private IEnumerator ScanKeysRoutine(string filter)
         {
             _barRow.SetActive(true);
-            UGUIShip.SetDeluxBarProgress(_bar, 0f);
+            _bar.Set(0f);
             SetStatus("assets.scanning");
             yield return null;
 
             _matches.Clear();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (_catalog == null)
+            if (AddressablesCatalogService.Keys == null)
             {
                 yield return StartCoroutine(LoadCatalogRoutine().WrapToIl2Cpp());
-                if (_catalog == null)
+                if (AddressablesCatalogService.Keys == null)
                 {
                     _barRow.SetActive(false);
                     SetStatus("assets.no_catalog");
@@ -672,16 +801,17 @@ namespace BetterFG.Features.Assets
                 }
             }
 
-            for (int i = 0; i < _catalog.Count; i++)
+            var catalog = AddressablesCatalogService.Keys;
+            for (int i = 0; i < catalog.Count; i++)
             {
-                string s = _catalog[i];
+                string s = catalog[i];
                 if (s.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 if (IsBank(s) && s.IndexOf(".assets.", StringComparison.OrdinalIgnoreCase) < 0) continue;
                 if (!KindAllows(s)) continue;
                 if (seen.Add(s)) _matches.Add(s);
                 if ((i & 8191) == 0)
                 {
-                    UGUIShip.SetDeluxBarProgress(_bar, (i + 1f) / _catalog.Count);
+                    _bar.Set((i + 1f) / catalog.Count);
                     yield return null;
                 }
             }
@@ -689,89 +819,16 @@ namespace BetterFG.Features.Assets
             _matches.Sort(StringComparer.OrdinalIgnoreCase);
             _page = 0;
             UGUIShip.RelabelText(_pageCarousel, LocalizationService.Format("assets.page", 1, PAGES));
-            Plugin.Log.LogInfo($"addressables scan for '{filter}': {_matches.Count} of {_catalog.Count} catalog entries");
+            Plugin.Log.LogInfo($"addressables scan for '{filter}': {_matches.Count} of {catalog.Count} catalog entries");
 
             yield return StartCoroutine(LoadPageRoutine().WrapToIl2Cpp());
         }
 
-        private static List<string> _catalog;
-
-        // the addressables catalog is a plain-json TextAsset inside catalog.bundle, and its
-        // m_InternalIds array is every asset path the game can load. reading it off disk keeps the
-        // whole scan out of IL2Cpp iterators, whose Current access-violates under interop.
         private IEnumerator LoadCatalogRoutine()
         {
             SetStatus("assets.reading_catalog");
             yield return null;
-
-            string path = System.IO.Path.Combine(Application.streamingAssetsPath, "aa", "catalog.bundle");
-            if (!System.IO.File.Exists(path))
-            {
-                Plugin.Log.LogWarning("no catalog.bundle at " + path);
-                yield break;
-            }
-
-            var ab = Bundles.LoadMemorySync("bettrfg_catalog", System.IO.File.ReadAllBytes(path));
-            if (ab == null) { Plugin.Log.LogWarning("catalog.bundle wouldn't open"); yield break; }
-            yield return null;
-
-            string json = null;
-            var names = ab.GetAllAssetNames();
-            for (int i = 0; i < names.Length && json == null; i++)
-            {
-                var ta = ab.LoadAsset(names[i]).TryCast<TextAsset>();
-                if (ta != null) json = ta.text;
-            }
-            Bundles.Unload("bettrfg_catalog", true);
-            yield return null;
-
-            if (string.IsNullOrEmpty(json)) { Plugin.Log.LogWarning("catalog bundle had no text asset in it"); yield break; }
-
-            _catalog = ParseCatalogKeys(json);
-            Plugin.Log.LogInfo($"catalog read, {_catalog.Count} addressable keys");
-        }
-
-        // the addressable KEYS (the addresses LoadAssetAsync actually accepts) are not m_InternalIds -
-        // those are the provider-side paths. the keys live base64'd in m_KeyDataString, indexed by the
-        // offsets in m_BucketDataString.
-        private static List<string> ParseCatalogKeys(string json)
-        {
-            var keys = new List<string>();
-            var keyData = ReadB64Field(json, "m_KeyDataString");
-            var bucketData = ReadB64Field(json, "m_BucketDataString");
-            if (keyData == null || bucketData == null) return keys;
-
-            int count = BitConverter.ToInt32(bucketData, 0);
-            int bi = 4;
-            for (int i = 0; i < count; i++)
-            {
-                if (bi + 8 > bucketData.Length) break;
-                int offset = BitConverter.ToInt32(bucketData, bi); bi += 4;
-                int entryCount = BitConverter.ToInt32(bucketData, bi); bi += 4;
-                bi += entryCount * 4;
-
-                if (offset < 0 || offset >= keyData.Length) continue;
-                byte type = keyData[offset];
-                if (type != 0 && type != 1) continue;
-                int len = BitConverter.ToInt32(keyData, offset + 1);
-                if (len <= 0 || offset + 5 + len > keyData.Length) continue;
-                keys.Add(type == 0
-                    ? System.Text.Encoding.ASCII.GetString(keyData, offset + 5, len)
-                    : System.Text.Encoding.Unicode.GetString(keyData, offset + 5, len));
-            }
-            return keys;
-        }
-
-        private static byte[] ReadB64Field(string json, string field)
-        {
-            string tag = "\"" + field + "\":\"";
-            int at = json.IndexOf(tag, StringComparison.Ordinal);
-            if (at < 0) return null;
-            at += tag.Length;
-            int end = json.IndexOf('"', at);
-            if (end < 0) return null;
-            try { return Convert.FromBase64String(json.Substring(at, end - at)); }
-            catch { return null; }
+            yield return StartCoroutine(AddressablesCatalogService.LoadRoutine().WrapToIl2Cpp());
         }
 
         // one slice of the match list at a time: the previous page's rows and anything it loaded go
@@ -779,7 +836,7 @@ namespace BetterFG.Features.Assets
         private IEnumerator LoadPageRoutine()
         {
             _barRow.SetActive(true);
-            UGUIShip.SetDeluxBarProgress(_bar, 0f);
+            _bar.Set(0f);
 
             _keys.Clear();
             _results.Clear();
@@ -790,7 +847,7 @@ namespace BetterFG.Features.Assets
 
             Resources.UnloadUnusedAssets();
             yield return null;
-            UGUIShip.SetDeluxBarProgress(_bar, 0.35f);
+            _bar.Set(0.35f);
 
             int pageSize = Mathf.CeilToInt(_matches.Count / (float)PAGES);
             int start = _page * pageSize;
@@ -801,15 +858,15 @@ namespace BetterFG.Features.Assets
                 _keys.Add(_matches[i]);
                 if ((_keys.Count & 255) == 0)
                 {
-                    UGUIShip.SetDeluxBarProgress(_bar, 0.35f + 0.5f * (i - start) / Mathf.Max(1, end - start));
+                    _bar.Set(0.35f + 0.5f * (i - start) / Mathf.Max(1, end - start));
                     yield return null;
                 }
             }
 
-            UGUIShip.SetDeluxBarProgress(_bar, 0.9f);
+            _bar.Set(0.9f);
             yield return null;
             RebuildRows();
-            UGUIShip.SetDeluxBarProgress(_bar, 1f);
+            _bar.Set(1f);
             yield return new WaitForSecondsRealtime(0.15f);
             _barRow.SetActive(false);
 
@@ -862,28 +919,25 @@ namespace BetterFG.Features.Assets
         {
             _rows.Clear();
             _checks.Clear();
+            _rowBodies.Clear();
+            _rowCenters.Clear();
+            _rowVisible.Clear();
             for (int i = _listContent.childCount - 1; i >= 0; i--)
                 Destroy(_listContent.GetChild(i).gameObject);
 
-            float rowH = 22f;
+            float rowH = 22f * UIScale.S, y = _listPadTop;
             int count = _everything ? _keys.Count : _results.Count;
             for (int i = 0; i < count; i++)
             {
                 int idx = i;
                 string id = _everything ? _keys[i] : _results[i].name;
-                var rowGo = new GameObject("Row_" + id);
-                rowGo.transform.SetParent(_listContent, false);
-                rowGo.AddComponent<RectTransform>();
+                var btn = UGUIShip.CreateButton(_listContent, new Rect(0f, y, _listW, rowH), "",
+                    RowColor(i, false), WHITE, UIScale.FS_SM, new Action(() => PickRow(idx)), skipHoverSound: true);
+                var rowGo = btn.gameObject;
+                rowGo.name = "Row_" + id;
+                var rowRt = rowGo.GetComponent<RectTransform>();
                 var le = rowGo.AddComponent<LayoutElement>();
                 le.preferredHeight = rowH;
-                le.flexibleWidth = 1f;
-
-                var rowImg = rowGo.AddComponent<Image>();
-                rowImg.color = UGUIShip.ROW_CLEAR;
-                var btn = rowGo.AddComponent<Button>();
-                btn.targetGraphic = rowImg;
-                btn.onClick.AddListener(new Action(() => PickRow(idx)));
-                UGUIShip.PaintListRow(btn, i, false);
 
                 var trig = rowGo.GetComponent<UnityEngine.EventSystems.EventTrigger>()
                     ?? rowGo.AddComponent<UnityEngine.EventSystems.EventTrigger>();
@@ -897,7 +951,7 @@ namespace BetterFG.Features.Assets
                 }));
                 trig.triggers.Add(entry);
 
-                var box = UGUIShip.CreateButton(rowGo.transform, new Rect(4f, 4f, 14f, 14f), "",
+                var box = UGUIShip.CreateButton(rowGo.transform, new Rect(4f, (rowH - 14f) * 0.5f, 14f, 14f), "",
                     new Color(0f, 0f, 0f, 0.5f), WHITE, UIScale.FS_SM, new Action(() => ToggleCheck(idx)));
                 var markGo = new GameObject("Tick");
                 markGo.transform.SetParent(box.transform, false);
@@ -914,7 +968,7 @@ namespace BetterFG.Features.Assets
                 {
                     var tGo = new GameObject("Type");
                     tGo.transform.SetParent(rowGo.transform, false);
-                    UGUIShip.SetPixelRect(tGo.AddComponent<RectTransform>(), new Rect(textX, 3f, 16f, 16f));
+                    UGUIShip.SetPixelRect(tGo.AddComponent<RectTransform>(), new Rect(textX, (rowH - 16f) * 0.5f, 16f, 16f));
                     var tImg = tGo.AddComponent<RawImage>();
                     tImg.texture = typeTex;
                     tImg.raycastTarget = false;
@@ -929,22 +983,33 @@ namespace BetterFG.Features.Assets
                     var iconGo = new GameObject("Icon");
                     iconGo.transform.SetParent(rowGo.transform, false);
                     var irt = iconGo.AddComponent<RectTransform>();
-                    UGUIShip.SetPixelRect(irt, new Rect(textX, 1f, 20f, 20f));
+                    UGUIShip.SetPixelRect(irt, new Rect(textX, (rowH - 20f) * 0.5f, 20f, 20f));
                     var rawImg = iconGo.AddComponent<RawImage>();
                     rawImg.texture = iconTex;
                     rawImg.raycastTarget = false;
                     textX += 24f;
                 }
 
-                float availW = Mathf.Max(80f, _listW - textX);
-                var lbl = UGUIShip.CreateLabel(rowGo.transform, new Rect(textX, 0f, availW, rowH),
-                    _everything ? RowTitle(id) : CosmeticLabel(_results[i]),
-                    UIScale.FS_SM, WHITE, TextAnchor.MiddleLeft);
-                lbl.raycastTarget = false;
+                float availW = Mathf.Max(80f, _listW - textX - 8f);
+                var lbl = btn.GetComponentInChildren<Text>();
+                UGUIShip.RelabelText(lbl, _everything ? RowTitle(id) : CosmeticLabel(_results[i]));
+                lbl.alignment = TextAnchor.MiddleLeft;
+                UGUIShip.SetPixelRect(lbl.rectTransform, new Rect(textX, 0f, availW, rowH));
                 FitRow(le, lbl, textX, availW, rowH);
+                float h = le.preferredHeight;
+                rowRt.sizeDelta = new Vector2(_listW, h);
+                _rowBodies.Add(rowRt);
+                _rowCenters.Add(y + h * 0.5f);
+                _rowVisible.Add(true);
+                y += h + ROW_GAP;
                 _rows.Add(btn);
             }
+            _listContent.sizeDelta = new Vector2(0f, y);
+            _scrollVel = 0f;
+            ApplyCurve();
         }
+
+        private static Color RowColor(int i, bool selected) => selected ? ROW_SEL : (i % 2 == 0 ? BTN_DARK : ROW_ALT);
 
         private void SelectAllInSearch()
         {
@@ -1013,22 +1078,8 @@ namespace BetterFG.Features.Assets
             return null;
         }
 
-        private const int ROW_MAX_LINES = 3;
-
         private static void FitRow(LayoutElement le, Text lbl, float x, float availW, float rowH)
-        {
-            lbl.horizontalOverflow = HorizontalWrapMode.Wrap;
-            lbl.verticalOverflow = VerticalWrapMode.Overflow;
-
-            float wide = lbl.preferredWidth;
-            if (wide <= availW || availW <= 0f) return;
-
-            int lines = Mathf.Clamp(Mathf.CeilToInt(wide / availW), 1, ROW_MAX_LINES);
-            float lineH = UIScale.FS_SM + 4f;
-            float want = rowH + (lines - 1) * lineH;
-            le.preferredHeight = want;
-            UGUIShip.SetPixelRect(lbl.rectTransform, new Rect(x, 0f, availW, want));
-        }
+            => UGUIShip.FitWrappedRow(le, lbl, x, availW, rowH);
 
         private GameObject _rowMenu;
 
@@ -1138,9 +1189,10 @@ namespace BetterFG.Features.Assets
 
         private void PickRow(int idx)
         {
+            CloseRowMenu();
+            if (_previewIdx >= 0 && _previewIdx < _rows.Count) UGUIShip.SetButtonColor(_rows[_previewIdx], RowColor(_previewIdx, false));
             _previewIdx = idx;
-            for (int i = 0; i < _rows.Count; i++)
-                UGUIShip.PaintListRow(_rows[i], i, i == idx);
+            UGUIShip.SetButtonColor(_rows[idx], RowColor(idx, true));
             if (_everything) StartCoroutine(PreviewKeyRoutine(_keys[idx]).WrapToIl2Cpp());
             else StartCoroutine(PreviewRoutine(_results[idx]).WrapToIl2Cpp());
         }
@@ -1169,6 +1221,9 @@ namespace BetterFG.Features.Assets
             }
             _previewIsTexture = false;
             _previewImg.texture = null;
+            _stageImg.texture = null;
+            _stageImg.color = Color.clear;
+            ShowStage(false);
             ClearSounds();
             _particles.Clear();
             _particleClock = 0f;
@@ -1199,6 +1254,8 @@ namespace BetterFG.Features.Assets
             instance.transform.SetParent(_previewHolder.transform, false);
             instance.transform.SetPositionAndRotation(Parked, Quaternion.identity);
             GameObjectHelper.SetLayerRecursively(instance, LeaderboardMugshotScene.Layer);
+            foreach (var mb in instance.GetComponentsInChildren<MonoBehaviour>(true))
+                if (mb != null) mb.enabled = false;
             instance.SetActive(true);
             foreach (var t in instance.GetComponentsInChildren<Transform>(true))
                 if (t != null && !t.gameObject.activeSelf) t.gameObject.SetActive(true);
@@ -1238,8 +1295,9 @@ namespace BetterFG.Features.Assets
             }
 
             if (_rt == null) BuildCamera();
-            _previewImg.texture = _rt;
-            _previewImg.color = WHITE;
+            ShowStage(true);
+            _stageImg.texture = _rt;
+            _stageImg.color = WHITE;
         }
 
         private static readonly PrimitiveType[] STAGE =
@@ -1279,20 +1337,32 @@ namespace BetterFG.Features.Assets
             DontDestroyOnLoad(_camHost);
             float pw = _previewRt.rect.width, ph = _previewRt.rect.height;
             float aspect = pw > 0f && ph > 0f ? pw / ph : 1f;
-            int rtW = aspect >= 1f ? 768 : Mathf.Max(64, Mathf.RoundToInt(768f * aspect));
-            int rtH = aspect >= 1f ? Mathf.Max(64, Mathf.RoundToInt(768f / aspect)) : 768;
+            int rtW = aspect >= 1f ? 1280 : Mathf.Max(64, Mathf.RoundToInt(1280f * aspect));
+            int rtH = aspect >= 1f ? Mathf.Max(64, Mathf.RoundToInt(1280f / aspect)) : 1280;
 
             _cam = LeaderboardMugshotScene.BuildCamera(_camHost, out _lights);
             _cam.aspect = aspect;
             _cam.clearFlags = CameraClearFlags.SolidColor;
-            _cam.backgroundColor = new Color(0.055f, 0.055f, 0.06f, 1f);
-            _rt = new RenderTexture(rtW, rtH, 16, RenderTextureFormat.RGB565);
+            _cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+            _rt = new RenderTexture(rtW, rtH, 16, RenderTextureFormat.ARGB32);
             _rt.filterMode = FilterMode.Bilinear;
             _rt.Create();
         }
 
         private static IEnumerator SpawnKey(string key, Action<GameObject> done)
         {
+            var locOp = Addressables.LoadResourceLocationsAsync(key, Il2CppType.Of<GameObject>());
+            yield return locOp;
+            var locs = locOp.Result?.TryCast<Il2CppSystem.Collections.Generic.List<IResourceLocation>>();
+            if (locOp.Status != AsyncOperationStatus.Succeeded || locs == null || locs.Count == 0)
+            {
+                Plugin.Log.LogInfo(key + " isn't a prefab, nothing to spawn");
+                Addressables.Release(locOp);
+                done(null);
+                yield break;
+            }
+            Addressables.Release(locOp);
+
             AsyncOperationHandle<GameObject> op;
             try { op = Addressables.InstantiateAsync(key, (Transform)null, false, true); }
             catch (Exception ex)
@@ -1310,21 +1380,6 @@ namespace BetterFG.Features.Assets
             }
             else done(null);
         }
-
-        private static bool IsBank(string key) => key.EndsWith(".bytes", StringComparison.OrdinalIgnoreCase);
-
-        private static bool IsMaterial(string key) => key.EndsWith(".mat", StringComparison.OrdinalIgnoreCase);
-
-        private static bool IsImage(string key) =>
-            key.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-            key.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-            key.EndsWith(".tga", StringComparison.OrdinalIgnoreCase) ||
-            key.EndsWith(".psd", StringComparison.OrdinalIgnoreCase) ||
-            key.EndsWith(".exr", StringComparison.OrdinalIgnoreCase) ||
-            IsCubemap(key);
-
-        private static bool IsCubemap(string key) =>
-            key.EndsWith(".hdr", StringComparison.OrdinalIgnoreCase);
 
         private IEnumerator PreviewKeyRoutine(string key)
         {
@@ -1468,6 +1523,7 @@ namespace BetterFG.Features.Assets
                 string cubeDir = System.IO.Path.Combine(SettingsService.ExportsDir, "Textures", safe);
                 System.IO.Directory.CreateDirectory(cubeDir);
 
+                yield return StartCoroutine(BundleReaderPrompt.Ensure().WrapToIl2Cpp());
                 System.Diagnostics.Process cubeProc;
                 string cubeErr;
                 try { cubeProc = FbxExport.StartPrefabExport(cubeDir, key, out cubeErr); }
@@ -1608,6 +1664,7 @@ namespace BetterFG.Features.Assets
                 : System.IO.Path.Combine(SettingsService.ExportsDir, "Models", bucket, FbxExport.Safe(leaf));
             System.IO.Directory.CreateDirectory(dir);
 
+            yield return StartCoroutine(BundleReaderPrompt.Ensure().WrapToIl2Cpp());
             System.Diagnostics.Process proc;
             string err;
             try { proc = FbxExport.StartPrefabExport(dir, key, out err); }
@@ -1664,6 +1721,7 @@ namespace BetterFG.Features.Assets
             SetStatus("assets.scene_reading");
             yield return null;
 
+            yield return StartCoroutine(BundleReaderPrompt.Ensure().WrapToIl2Cpp());
             System.Diagnostics.Process proc;
             string err;
             try { proc = FbxExport.StartSceneExport(dir, sceneName, out err); }
@@ -1737,6 +1795,7 @@ namespace BetterFG.Features.Assets
                     : SpawnKey(name, r => instance = r).WrapToIl2Cpp());
                 if (instance == null) continue;
 
+                yield return StartCoroutine(BundleReaderPrompt.Ensure().WrapToIl2Cpp());
                 string dir = null;
                 System.Diagnostics.Process fetch = null;
                 string err = null;
@@ -1784,7 +1843,7 @@ namespace BetterFG.Features.Assets
             if (lastFile != null) ReplayExport.Reveal(lastFile);
         }
 
-        private bool _overlayHidden;
+        private float _tickTimer;
 
         void Update()
         {
@@ -1792,16 +1851,9 @@ namespace BetterFG.Features.Assets
             if (Input.GetKeyDown(KeyCode.Escape)) { Close(); return; }
             if (_canvas == null) return;
 
-            bool overlay = (BetterFGUIMan.Instance != null && BetterFGUIMan.Instance.IsVisible)
-                || (UI.SideWheel.SideWheelManager.Instance != null
-                    && UI.SideWheel.SideWheelManager.Instance.IsWheelVisible);
-            if (_overlayHidden != overlay)
-            {
-                _overlayHidden = overlay;
-                var caster = _canvas.GetComponent<GraphicRaycaster>();
-                if (caster != null) caster.enabled = !overlay;
-            }
-            if (overlay) { TickTransport(); RenderPreview(); return; }
+            TickSmoothScroll();
+            _tickTimer += Time.deltaTime;
+            if (_tickTimer >= 0.1f) { _tickTimer = 0f; WinDialogs.Tick(); }
 
             if (_rowMenu != null && Input.GetMouseButtonDown(0)
                 && !RectTransformUtility.RectangleContainsScreenPoint(

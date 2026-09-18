@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using FG.Common;
 using FG.Common.LevelEditor.Serialization;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
@@ -166,6 +166,12 @@ namespace BetterFG.UI.Windows.Creative
             var go = LevelLoader.LoadObject(schema, false);
             var lepo = go != null ? go.GetComponent<LevelEditorPlaceableObject>() : null;
             if (lepo == null) { Plugin.Log.LogWarning("controller copy didn't come back as a placeable"); return null; }
+
+            // The game's own clone is GetObjectSchema -> LoadObject -> ConfigureIndividualObjectPostLoad
+            // (LevelEditorStateReticleInputHandler.CloneObject). We were skipping the last step, so the
+            // copy came out with its rotation parameter never written and never activated.
+            try { LevelLoader.ConfigureIndividualObjectPostLoad(go, (LevelEditorPlaceableObject)null, schema); }
+            catch (Exception ex) { Plugin.Log.LogWarning($"controller copy post-load threw: {ex.Message}"); }
 
             try { lepo.OnDeselectInGameEditor(true); }
             catch (Exception ex) { Plugin.Log.LogWarning($"controller copy finalise threw: {ex.Message}"); }

@@ -145,7 +145,7 @@ namespace BetterFG.UI.Windows.Creative
             Vector3 factor = ot.localScale;
             if (factor == Vector3.one && ot.rotation == Quaternion.identity) return;
 
-            var kids = new System.Collections.Generic.List<(Transform t, Vector3 pos, Quaternion rot, LevelEditorScaleParameter sp, Vector3 scale)>();
+            var kids = new System.Collections.Generic.List<(LevelEditorPlaceableObject obj, Vector3 pos, Quaternion rot, LevelEditorScaleParameter sp, Vector3 scale)>();
             var sel = LevelEditorMultiSelectionHandler.Selection();
             if (sel != null)
             {
@@ -154,17 +154,18 @@ namespace BetterFG.UI.Windows.Creative
                     if (obj == null) continue;
                     var t = obj.transform;
                     var sp = obj._levelEditorScaleParameter;
-                    kids.Add((t, t.position, t.rotation, sp, Vector3.Scale(sp != null ? sp.CurrentScale : t.localScale, factor)));
+                    kids.Add((obj, t.position, t.rotation, sp, Vector3.Scale(sp != null ? sp.CurrentScale : t.localScale, factor)));
                 }
             }
 
             ot.localScale = Vector3.one;
             ot.rotation = Quaternion.identity;
-            foreach (var (t, pos, rot, sp, scale) in kids)
+            foreach (var (obj, pos, rot, sp, scale) in kids)
             {
                 if (sp != null) sp.SetScale(scale, true);
-                else t.localScale = scale; // unscalable object, keep the look for the session at least
-                t.SetPositionAndRotation(pos, rot);
+                else obj.transform.localScale = scale; // unscalable object, keep the look for the session at least
+                obj.Position = pos;
+                obj.transform.rotation = rot;
             }
 
             Plugin.Log.LogDebug($"baked {factor} off the multiselect owner into {kids.Count} objects, owner's back to 1");

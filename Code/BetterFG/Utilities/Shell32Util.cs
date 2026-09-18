@@ -232,10 +232,19 @@ namespace BetterFG.Utilities
                 DragQueryFile(hDrop, i, sb, (uint)sb.Capacity);
                 string path = sb.ToString();
                 if (string.IsNullOrEmpty(path)) continue;
+                string captured = path;
+                if (path.EndsWith(".bfgtp", StringComparison.OrdinalIgnoreCase))
+                {
+                    WinDialogs.Enqueue(() =>
+                    {
+                        if (!BetterFG.UI.Tabs.TexturePacksTab.ImportDropped(captured))
+                            Plugin.Log.LogInfo($"{System.IO.Path.GetFileName(captured)} dropped but the texture packs tab isn't open, ignoring");
+                    });
+                    continue;
+                }
                 if (!path.EndsWith(".bfgprofile", StringComparison.OrdinalIgnoreCase)) continue;
 
                 // import on the Unity main thread, never touch managed game state from the wndproc
-                string captured = path;
                 WinDialogs.Enqueue(() =>
                 {
                     string name = ProfileService.Import(captured);

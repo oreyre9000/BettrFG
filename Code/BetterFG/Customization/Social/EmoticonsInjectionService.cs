@@ -20,6 +20,7 @@ namespace BetterFG.Customization.Social
         // the actual option object each slot held before we overwrote it. restoring the object works
         // for slots that held an EmotesOption too (those have no _speechId to look up).
         private static readonly Dictionary<int, ItemDefinitionSO> OriginalSlotObjects = new Dictionary<int, ItemDefinitionSO>();
+        private static IntPtr _snapshotList = IntPtr.Zero;
         internal static readonly Dictionary<int, int> Remap = new Dictionary<int, int>();
         // customSpeechId → entry id, so the play patch reads the entry's *current* sounds live
         internal static readonly Dictionary<int, string> SoundOwner = new Dictionary<int, string>();
@@ -85,6 +86,40 @@ namespace BetterFG.Customization.Social
             return 0.6f;
         }
 
+        internal static ImageSpeechOption BuildOption(EmoticonEntry e, ImageSpeechOption src, int speechId)
+        {
+            string cmsId = string.IsNullOrEmpty(e.itemId) ? $"bfg_emoticon_{e.id}" : e.itemId;
+
+            var cms = new CustomiserEmoticons();
+            cms.Id = cmsId;
+            var srcCms = src.CMSData?.Cast<CMSItemDefinition>();
+            cms.IconName = srcCms?.IconName ?? (string.IsNullOrEmpty(e.itemId) ? cmsId : e.itemId);
+            if (srcCms != null) cms.ItemRarity = srcCms.ItemRarity;
+            if (!string.IsNullOrEmpty(e.name))
+                cms.Cast<CMSItemDefinition>().Name = new LocalisedString { Id = cmsId + "_name", Text = e.name };
+
+            var opt = ScriptableObject.CreateInstance<ImageSpeechOption>();
+            opt.SetCMSData(cms);
+            opt.name = cms.Id;
+            opt._speechId = speechId;
+            opt._speechDuration = 3f;
+            opt._speechHasDuration = true;
+            opt._audioBank = null;
+            opt._audioEvent = null;
+            opt._cachedAtlasSprite = src._cachedAtlasSprite;
+            opt._sprite = src._sprite;
+            opt._spriteAtlasLoadableAsset = src._spriteAtlasLoadableAsset;
+            opt.menuDisplaySpriteAtlasReference = src.menuDisplaySpriteAtlasReference;
+            opt.menuDisplaySpriteReference = src.menuDisplaySpriteReference;
+
+            if (SocialSpriteCache.TryGet(e.imagePath, out var customSprite, out var cacheableSprite))
+            {
+                opt._sprite = customSprite;
+                opt._cachedAtlasSprite = cacheableSprite;
+            }
+            return opt;
+        }
+
         // ── Core ──────────────────────────────────────────────────────────────
 
         // resolve the EmotesAndEmoticons slot list. shared by Restore/Inject so both hit the same
@@ -114,12 +149,14 @@ namespace BetterFG.Customization.Social
                 var slots = ResolveSlots(handler);
                 if (slots == null) return;
 
-                foreach (var kvp in OriginalSlotObjects)
-                {
-                    int si = kvp.Key;
-                    if (si >= slots.Count || kvp.Value == null) continue;
-                    slots[si] = kvp.Value;
-                }
+                if (slots.Pointer == _snapshotList)
+                    foreach (var kvp in OriginalSlotObjects)
+                    {
+                        int si = kvp.Key;
+                        if (si >= slots.Count || kvp.Value == null) continue;
+                        slots[si] = kvp.Value;
+                    }
+                _snapshotList = IntPtr.Zero;
                 OriginalSlots.Clear();
                 OriginalSlotObjects.Clear();
                 Remap.Clear();
@@ -132,13 +169,10 @@ namespace BetterFG.Customization.Social
         {
             try
             {
-                var speechMgr = SingletonBehaviour<SpeechOptionsManager>.Instance;
-                if (speechMgr == null) { LastStatus = "Not in a round yet."; return; }
-
                 var slots = ResolveSlots(handler);
                 if (slots == null) return;
 
-                var lookup = speechMgr._speechOptionsLookup;
+                var lookup = SingletonBehaviour<SpeechOptionsManager>.Instance?._speechOptionsLookup;
 
                 // find a reference emoticon option to clone metadata from, and index every emoticon
                 // option by its CMS id so an entry's itemId can pull that exact emoticon's own
@@ -147,16 +181,18 @@ namespace BetterFG.Customization.Social
                 // so the wheel only ever showed whatever emoticon was last loaded.
                 ImageSpeechOption refOpt = null;
                 var byId = new Dictionary<string, ImageSpeechOption>(StringComparer.OrdinalIgnoreCase);
-                foreach (var kvp in lookup)
+                void Index(ImageSpeechOption iso)
                 {
-                    if (kvp.Value?.CMSGroupID != "cosmetics_emoticons") continue;
-                    var iso = kvp.Value.TryCast<ImageSpeechOption>();
-                    if (iso == null) continue;
+                    if (iso == null || iso.CMSGroupID != "cosmetics_emoticons") return;
                     if (refOpt == null) refOpt = iso;
                     var id = iso.CMSData?.Cast<CMSItemDefinition>()?.Id;
-                    if (!string.IsNullOrEmpty(id)) byId[id] = iso;
+                    if (!string.IsNullOrEmpty(id) && !byId.ContainsKey(id)) byId[id] = iso;
                 }
-                if (refOpt == null) { LastStatus = "No reference emoticon found in lookup."; return; }
+                if (lookup != null)
+                    foreach (var kvp in lookup) Index(kvp.Value?.TryCast<ImageSpeechOption>());
+                for (int i = 0; i < slots.Count; i++) Index(slots[i]?.TryCast<ImageSpeechOption>());
+                Index(EmoticonLockerService.ArtSource);
+                if (refOpt == null) { LastStatus = "No reference emoticon found."; return; }
 
                 // ── Step 2: inject enabled entries ─────────────────────────────
                 int injected = 0;
@@ -172,11 +208,10 @@ namespace BetterFG.Customization.Social
                     {
                         OriginalSlots[slotIndex] = originalId;
                         OriginalSlotObjects[slotIndex] = slots[slotIndex];
+                        _snapshotList = slots.Pointer;
                     }
 
                     int customId = 60000 + slotIndex * 100 + injected;
-
-                    string cmsId = string.IsNullOrEmpty(e.itemId) ? $"bfg_emoticon_{e.id}" : e.itemId;
 
                     // clone metadata from the emoticon the itemId names (its own icon art), falling
                     // back to the generic ref when the id isn't found or none was given.
@@ -184,33 +219,9 @@ namespace BetterFG.Customization.Social
                     if (!string.IsNullOrEmpty(e.itemId) && byId.TryGetValue(e.itemId, out var matched))
                         src = matched;
 
-                    var cms = new CustomiserEmoticons();
-                    cms.Id = cmsId;
-                    var srcCms = src.CMSData?.Cast<CMSItemDefinition>();
-                    cms.IconName = srcCms?.IconName ?? (string.IsNullOrEmpty(e.itemId) ? cmsId : e.itemId);
-                    if (srcCms != null) cms.ItemRarity = srcCms.ItemRarity;
+                    var opt = BuildOption(e, src, customId);
 
-                    var opt = ScriptableObject.CreateInstance<ImageSpeechOption>();
-                    opt.SetCMSData(cms);
-                    opt.name = cms.Id;
-                    opt._speechId = customId;
-                    opt._speechDuration = 3f;
-                    opt._speechHasDuration = true;
-                    opt._audioBank = null;
-                    opt._audioEvent = null;
-                    opt._cachedAtlasSprite = src._cachedAtlasSprite;
-                    opt._sprite = src._sprite;
-                    opt._spriteAtlasLoadableAsset = src._spriteAtlasLoadableAsset;
-                    opt.menuDisplaySpriteAtlasReference = src.menuDisplaySpriteAtlasReference;
-                    opt.menuDisplaySpriteReference = src.menuDisplaySpriteReference;
-
-                    if (SocialSpriteCache.TryGet(e.imagePath, out var customSprite, out var cacheableSprite))
-                    {
-                        opt._sprite = customSprite;
-                        opt._cachedAtlasSprite = cacheableSprite;
-                    }
-
-                    lookup[customId] = opt;
+                    if (lookup != null) lookup[customId] = opt;
                     slots[slotIndex] = opt;
 
                     bool hasSound = false;

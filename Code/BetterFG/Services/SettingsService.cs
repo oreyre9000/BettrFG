@@ -11,6 +11,7 @@ namespace BetterFG.Services
         private static readonly string OldSettingsDir;
         private static readonly string SettingsDir;
         public static readonly string ExportsDir;
+        public static readonly string TexturePacksDir;
         private static readonly string BackupDir;
         private static readonly string OldFilePath;
         private static readonly string FilePath;
@@ -43,6 +44,7 @@ namespace BetterFG.Services
             OldSettingsDir = Path.Combine(dllDir, "Settings");
             SettingsDir = Path.Combine(appData, "BettrFG", "Settings");
             ExportsDir = Path.Combine(appData, "BettrFG", "Exports");
+            TexturePacksDir = Path.Combine(appData, "BettrFG", "TexturePacks");
             BackupDir = Path.Combine(SettingsDir, "Backup");
             OldFilePath = Path.Combine(OldSettingsDir, "last.txt");
             FilePath = Path.Combine(SettingsDir, "last.txt");

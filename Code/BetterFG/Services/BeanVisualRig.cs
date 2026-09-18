@@ -60,6 +60,8 @@ namespace BetterFG.Services
         {
             Swap(_toReal);
             MoveProps(_clone, _real, _toReal);
+            _real.Clear();
+            _clone.Clear();
             Plugin.Log.LogInfo($"visual rig off {_bean.name}, meshes back on the real bones");
             Destroy(gameObject);
         }
@@ -125,7 +127,9 @@ namespace BetterFG.Services
             }
         }
 
-        void LateUpdate()
+        void LateUpdate() => Sync();
+
+        public void Sync()
         {
             if (_real.Count == 0 || _real[0] is null || _real[0].m_CachedPtr == IntPtr.Zero) return;
             for (int i = 0; i < _real.Count; i++)

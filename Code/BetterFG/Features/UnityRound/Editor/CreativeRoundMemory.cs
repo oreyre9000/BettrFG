@@ -55,9 +55,13 @@ namespace BetterFG.Features.UnityRound.Editor
                 return;
             }
 
+            UnityRoundCoreUrlEntry.Tick();
+
             _pollTimer += Time.unscaledDeltaTime;
             if (_pollTimer < 0.5f) return;
             _pollTimer = 0f;
+
+            UnityRoundLoader.TickAutoRefresh();
 
             string code = GetCurrentShareCode();
             if (string.IsNullOrEmpty(code)) return;
@@ -93,6 +97,13 @@ namespace BetterFG.Features.UnityRound.Editor
             SettingsService.Set(KeyFor(code), infoJsonPath);
             if (Instance != null) Instance._autoLoadedFor = code;
             Plugin.Log.LogInfo($"CreativeRoundMemory: bound round '{infoJsonPath}' to level {code}");
+        }
+
+        // the binding only sticks once the level is actually saved, not the moment you load a round to
+        // try it out, so an unsaved test load doesn't wedge the level into auto-loading it forever.
+        public static void OnLevelSaved()
+        {
+            if (UnityRoundLoader.HasSpawned) RememberLoaded(UnityRoundLoader.LoadedJsonPath);
         }
 
         // call after an unload: forget the round for the current level so it stays gone next time.

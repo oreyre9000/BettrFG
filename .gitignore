@@ -27,3 +27,4 @@ Code/BetterFG.SkinPackager/creator_deploy.txt
 *.kra
 /Code/BettrFGLocalizationEditor/publish
 *.pyc
+Code/prompt_mod.state.json

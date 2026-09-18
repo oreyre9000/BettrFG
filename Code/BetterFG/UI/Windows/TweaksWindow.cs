@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
@@ -239,7 +239,7 @@ namespace BetterFG.UI.Windows
             {
                 const float HELP_D = 14f;
                 UGUIShip.CreateHelp(rowGo.transform,
-                    new Rect(LABEL_X + lbl.preferredWidth + 5f, (ROW_H - HELP_D) * 0.5f, HELP_D, HELP_D),
+                    new Rect(LABEL_X + UGUIShip.PreferredWidth(lbl) + 5f, (ROW_H - HELP_D) * 0.5f, HELP_D, HELP_D),
                     tweak.TweakTooltip);
             }
 

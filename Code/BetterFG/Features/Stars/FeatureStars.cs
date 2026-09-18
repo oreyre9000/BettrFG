@@ -404,10 +404,17 @@ namespace BetterFG.Features.Stars
         }
 
         // called from the shared SetIndividualShowData hub in GameStatePatches.
+        static readonly Dictionary<int, string> _stampDispatched = new Dictionary<int, string>();
+
         public static void OnSetIndividualShowData(ShowSelectorShowTileViewModel tile, ShowSelectorShow showSelectorShow)
         {
             string code = showSelectorShow?.ShareCode ?? "(null)";
             if (!On("store") || string.IsNullOrEmpty(code) || code == "(null)") return;
+
+            int id = tile.GetInstanceID();
+            if (_stampDispatched.TryGetValue(id, out var seen) && seen == code) return;
+            _stampDispatched[id] = code;
+
             BetterFGUIMan.Instance.StartCoroutine(StampStarOverlayDelayed(tile, code).WrapToIl2Cpp());
         }
 

@@ -36,7 +36,7 @@ namespace BetterFG.UI
 
         // ── IFileDialog COM (folder picker) ───────────────────────────────────
 
-        [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        [ComImport, Guid("D57C7288-D4AD-4768-BE02-9D969532D960"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         private interface IFileOpenDialog
         {
             [PreserveSig] int Show(IntPtr parent);
@@ -236,28 +236,28 @@ namespace BetterFG.UI
                 _mainQueue.Enqueue(() => callback(result));
             });
 
-        /// <summary>Opens a file picker and returns its containing folder. callback(path) on result, path is null on cancel.</summary>
+        private const int CLSCTX_INPROC_SERVER = 0x1;
+
+        /// <summary>Opens the real Windows folder browser (IFileOpenDialog, FOS_PICKFOLDERS). callback(path) on result, path is null on cancel.</summary>
         public static void PickFolder(string title, Action<string> callback)
             => RunOnSta(() =>
             {
                 string result = null;
                 try
                 {
-                    var buf = new string('\0', 512);
-                    var ofn = new OPENFILENAME
+                    var rclsid = CLSID_FileOpenDialog;
+                    var riid = IID_IFileOpenDialog;
+                    int hr = CoCreateInstance(ref rclsid, IntPtr.Zero, CLSCTX_INPROC_SERVER, ref riid, out var dialog);
+                    if (hr == 0 && dialog != null)
                     {
-                        lStructSize = Marshal.SizeOf(typeof(OPENFILENAME)),
-                        lpstrFilter = "All Files\0*.*\0",
-                        nFilterIndex = 1,
-                        lpstrFile = buf,
-                        nMaxFile = buf.Length,
-                        lpstrTitle = title + " (select any file inside the folder)",
-                        Flags = 0x00080000 | 0x00001000 | 0x00000800,
-                    };
-                    if (GetOpenFileName(ref ofn))
-                    {
-                        string picked = ofn.lpstrFile.Split('\0')[0];
-                        result = System.IO.Path.GetDirectoryName(picked);
+                        dialog.SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+                        dialog.SetTitle(title);
+                        if (dialog.Show(IntPtr.Zero) == 0)
+                        {
+                            dialog.GetResult(out var item);
+                            item.GetDisplayName(SIGDN_FILESYSPATH, out var path);
+                            result = path;
+                        }
                     }
                 }
                 catch (Exception ex) { Plugin.Log.LogError("WinDialogs: PickFolder: " + ex.Message); }
@@ -266,12 +266,17 @@ namespace BetterFG.UI
 
         // ── STA thread runner ─────────────────────────────────────────────────
 
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+
         private static void RunOnSta(Action action)
         {
+            IntPtr gameWindow = GetForegroundWindow();
             var t = new Thread(() =>
             {
                 try { action(); }
                 catch (Exception ex) { Plugin.Log.LogError("WinDialogs: Thread error: " + ex.Message); }
+                finally { SetForegroundWindow(gameWindow); }
             });
             t.SetApartmentState(ApartmentState.STA);
             t.IsBackground = true;

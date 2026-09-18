@@ -362,7 +362,7 @@ namespace BetterFG.Customization.Player
                 if (fallbackType == "costume")
                 {
                     skin.keepBase = JsonUtil.GetBool(json, "keepBase");
-                    skin.skinScale = JsonUtil.GetFloat(json, "skinScale");
+                    skin.skinScale = PlayerScaleService.ClampSkinScale(JsonUtil.GetFloat(json, "skinScale"));
                     skin.boneOffsets = ParseBoneOffsets(json);
                 }
                 else if (fallbackType == "item")

@@ -62,6 +62,8 @@ namespace BetterFG.Tweaks
             // ── Gameplay ──
             //Add<InstantLandingIndicatorTweak>(TweakCategory.Gameplay);
             Add<DisableCameraAssistTweak>(TweakCategory.Gameplay);
+            Add<CustomCameraTweak>(TweakCategory.Gameplay);
+            Add<DisableStepAssistTweak>(TweakCategory.Gameplay);
             Add<ImmediateRespawnTweak>(TweakCategory.Gameplay);
             Add<CinematicSpectatorTweak>(TweakCategory.Gameplay);
             Add<CreativeIntroCameraTweak>(TweakCategory.Gameplay);
@@ -95,12 +97,14 @@ namespace BetterFG.Tweaks
             Add<ShowServerInfoTweak>(TweakCategory.Utility);
             Add<DisableAgeRatingPopupTweak>(TweakCategory.Utility);
             Add<ShowTilePlaysTweak>(TweakCategory.Utility);
+            Add<ShowTileDislikesTweak>(TweakCategory.Utility);
             Add<UpcomingShowsTweak>(TweakCategory.Utility);
             Add<AlwaysShowTimerTweak>(TweakCategory.Utility);
             Add<KeepNametagsTweak>(TweakCategory.Utility);
             Add<LevelDescriptionOnPauseTweak>(TweakCategory.Utility);
             Add<CreativeTypeValueTweak>(TweakCategory.Utility);
             Add<BetterStickerSelectionTweak>(TweakCategory.Utility);
+            Add<PlaytestTrailTweak>(TweakCategory.Utility);
             Add<LobbyCustomiserTweak>(TweakCategory.Utility);
             Add<NotifyRoundStartTweak>(TweakCategory.Utility);
             Add<RandomShowSelectTweak>(TweakCategory.Utility);
@@ -117,6 +121,7 @@ namespace BetterFG.Tweaks
 
         private static void Add<T>(TweakCategory cat) where T : BfgTweak
         {
+            if (BetterFG.Utilities.FeatureAvailability.Off(typeof(T).Name)) return;
             var t = _host.AddComponent<T>();
             _tweaks.Add(t);
             _cat[t] = cat;

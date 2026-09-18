@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -29,6 +29,7 @@ namespace BetterFG.Features.UnityRound
         public static BetterFGUnityRounds Instance { get; private set; }
 
         public static GameObject ActiveRound { get; private set; }
+        public static bool RoundLoadingOrActive => _roundLoadKey != null || ActiveRound != null;
         public static MapInfo ActiveMapInfo { get; private set; }
         public static Transform[] ActiveSpawnpoints { get; private set; }
         public static GameObject[] ActiveEndgoals { get; internal set; }
@@ -75,8 +76,9 @@ namespace BetterFG.Features.UnityRound
 
         private void Update() => RoundMusicService.TickVolume();
 
-        public static bool TryHandleDescription(string desc)
+        private static bool TryMatch(string desc, out Match m)
         {
+            m = null;
             if (string.IsNullOrEmpty(desc)) return false;
 
             // if the description is one we wrote from the editor (LRM + <color> + "BettrFG level "),
@@ -84,8 +86,15 @@ namespace BetterFG.Features.UnityRound
             string extracted = Editor.UnityRoundLoader.ExtractShareCode(desc);
             if (!string.IsNullOrEmpty(extracted)) desc = extracted;
 
-            var m = DESC_PATTERN.Match(desc.Trim());
-            if (!m.Success) return false;
+            m = DESC_PATTERN.Match(desc.Trim());
+            return m.Success;
+        }
+
+        public static bool DescriptionIsBfgRound(string desc) => TryMatch(desc, out _);
+
+        public static bool TryHandleDescription(string desc)
+        {
+            if (!TryMatch(desc, out var m)) return false;
 
             if (Instance == null)
             {
@@ -121,6 +130,8 @@ namespace BetterFG.Features.UnityRound
 
         public static void ResetRoundState(bool unloadBundle)
         {
+            UnityRoundAnchors.DetachAll();
+            BetterFGRoundPostmodifier.ClearLiveEnvironment();
             if (ActiveRound != null)
                 Destroy(ActiveRound);
 
@@ -168,6 +179,12 @@ namespace BetterFG.Features.UnityRound
             RenderSettings.skybox = _oldSkybox;
             _savedRenderSettings = false;
             Plugin.Log.LogInfo("BetterFGUnityRounds: environment restored");
+        }
+
+        public static void ForgetEnvironment()
+        {
+            _savedRenderSettings = false;
+            _oldSkybox = null;
         }
 
         public static void SaveEnvironmentIfNeeded()
@@ -730,10 +747,60 @@ namespace BetterFG.Features.UnityRound
                     fogDensity = ReadFloat(json, "fogDensity", 0.01f),
                     fogColor = ReadColor(json, "fogColor", new Color(0.5f, 0.5f, 0.5f)),
                     keepExistingObjects = ReadBool(json, "keepExistingObjects", false),
+                    hideFinishLines = ReadBool(json, "hideFinishLines", false),
+                    hideBackground = ReadBool(json, "hideBackground", false),
+                    hideThemeLighting = ReadBool(json, "hideThemeLighting", false),
                 };
             }
             catch { return null; }
         }
+
+        public static bool WriteInfoFields(string jsonPath, Action<MapInfo> mutate, out string error)
+        {
+            error = null;
+            try
+            {
+                if (!System.IO.File.Exists(jsonPath)) { error = "info.json not found"; return false; }
+                var info = ParseInfo(System.IO.File.ReadAllText(jsonPath));
+                if (info == null) { error = "info.json unreadable"; return false; }
+                mutate(info);
+                System.IO.File.WriteAllText(jsonPath, Serialize(info));
+                return true;
+            }
+            catch (Exception ex) { error = ex.Message; return false; }
+        }
+
+        private static string Serialize(MapInfo info)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\n");
+            void W(string key, string val, bool last = false) => sb.Append($"  \"{key}\":\"{val}\"{(last ? "" : ",")}\n");
+            W("displayName", Esc(info.displayName));
+            W("description", Esc(info.description));
+            W("file", Esc(info.file));
+            W("prefab", Esc(info.prefab));
+            W("skybox", Esc(info.skybox));
+            W("music", Esc(info.music));
+            W("musicBank", Esc(info.musicBank));
+            W("musicEvent", Esc(info.musicEvent));
+            W("musicStringsBank", Esc(info.musicStringsBank));
+            W("ambientMode", ((int)info.ambientMode).ToString(CultureInfo.InvariantCulture));
+            W("ambientLight", ColorStr(info.ambientLight));
+            W("reflectionIntensity", info.reflectionIntensity.ToString(CultureInfo.InvariantCulture));
+            W("fog", info.fog ? "true" : "false");
+            W("fogDensity", info.fogDensity.ToString(CultureInfo.InvariantCulture));
+            W("fogColor", ColorStr(info.fogColor));
+            W("keepExistingObjects", info.keepExistingObjects ? "true" : "false");
+            W("hideFinishLines", info.hideFinishLines ? "true" : "false");
+            W("hideBackground", info.hideBackground ? "true" : "false");
+            W("hideThemeLighting", info.hideThemeLighting ? "true" : "false", last: true);
+            sb.Append("}\n");
+            return sb.ToString();
+        }
+
+        private static string Esc(string s) => string.IsNullOrEmpty(s) ? "" : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+        private static string ColorStr(Color c) => string.Format(CultureInfo.InvariantCulture, "{0} {1} {2} {3}", c.r, c.g, c.b, c.a);
 
         private static string ReadStr(string json, string key)
         {
@@ -805,5 +872,11 @@ namespace BetterFG.Features.UnityRound
 
         // keep all placeable objects (don't disable) except the background CutoutSphere
         public bool keepExistingObjects;
+
+        public bool hideFinishLines;
+
+        public bool hideBackground;
+        public bool hideThemeLighting;
+
     }
 }

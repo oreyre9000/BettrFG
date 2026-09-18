@@ -151,60 +151,16 @@ namespace BetterFG.Tweaks
 
             if (!_claimed || !NavPromptCore.OverlayRowActive) Claim();
 
-            if (_respawning || RespawnMenu.AnyOpen) return;
+            if (_respawning) return;
             if (FGInputLockService.IsLocked) return;
-            if (!Rewired.ReInput.isReady) return;
-            var p = Rewired.ReInput.players.GetPlayer(0);
-            if (p == null) return;
-            if (p.GetButtonDown(RewiredConsts.Action.Default_ResetRunOrSkipRound)) QuickRespawn();
-            else if (MenuKeyDown(p)) OpenRespawnMenu();
+            if (BfgBinds.Respawn.Down) QuickRespawn();
+            else if (BfgBinds.RespawnMode.Down) ToggleQuickMode();
         }
 
-        private const KeyCode MenuKey = KeyCode.T;
-
-        private static bool MenuKeyDown(Rewired.Player p)
+        private static void ToggleQuickMode()
         {
-            var kb = Rewired.ReInput.controllers.Keyboard;
-            if (kb != null && kb.GetKeyDown(MenuKey)) return true;
-
-            var sticks = p.controllers.Joysticks;
-            for (int i = 0; i < p.controllers.joystickCount; i++)
-            {
-                var j = sticks[i];
-                if (j == null) continue;
-                int id = TopFaceElementId(j);
-                if (id >= 0 && j.GetButtonDownById(id)) return true;
-            }
-            return false;
-        }
-
-        private static int CurrentPadTopFace()
-        {
-            if (!Rewired.ReInput.isReady || Rewired.ReInput.players.playerCount == 0) return -1;
-            var p = Rewired.ReInput.players.GetPlayer(0);
-            var sticks = p.controllers.Joysticks;
-            for (int i = 0; i < p.controllers.joystickCount; i++)
-            {
-                var j = sticks[i];
-                if (j == null) continue;
-                int id = TopFaceElementId(j);
-                if (id >= 0) return id;
-            }
-            return -1;
-        }
-
-        private static int TopFaceElementId(Rewired.Joystick j)
-        {
-            var ids = j.ButtonElementIdentifiers;
-            int n = j.buttonCount;
-            for (int b = 0; b < n; b++)
-            {
-                var id = ids[b];
-                if (id == null) continue;
-                string name = id.name;
-                if (name == "Triangle" || name == "Y") return id.id;
-            }
-            return -1;
+            SetQuickMode(!QuickModeIsStart);
+            _claimed = false;
         }
 
         // "where we first spawned" = the local bean's own position on the first frame it exists this
@@ -219,43 +175,36 @@ namespace BetterFG.Tweaks
             _startSpawn = fgcc.transform.position;
         }
 
-        // two prompts in the row: the existing Respawn button (retargeted to Default_ResetRunOrSkipRound
-        // so Rewired resolves R on keyboard, Triangle on DS4/DS5, Y on Xbox), plus a Menu opener bound
-        // to Default_ShowNames (Tab on keyboard, L3 press on pad — nothing to show in solo UGC).
         private static void Claim()
         {
+            bool start = QuickModeIsStart;
             NavPromptCore.ClaimOverlayRow(
                 new NavPromptCore.OverlayClaim
                 {
                     Key = NavPrompt.Report,
                     LabelKey = "bfg_respawn_label",
-                    LabelText = "Respawn",
+                    LabelText = LocalizationService.Get("respawn.prompt_respawn"),
                     OnPressed = QuickRespawn,
-                    IconAction = RewiredConsts.Action.Default_ResetRunOrSkipRound,
+                    IconAction = BfgBinds.Respawn.ActionId,
                     IconCategory = RewiredConsts.Category.Default,
                 },
                 new NavPromptCore.OverlayClaim
                 {
                     Key = NavPromptCore.Favourite,
-                    LabelKey = "bfg_respawn_menu_label",
-                    LabelText = "Respawn Menu",
-                    OnPressed = OpenRespawnMenu,
-                    PostBuild = btn => NavPromptCore.ApplyOwnGlyphByElement(btn, MenuKey, CurrentPadTopFace()),
+                    LabelKey = start ? "bfg_respawn_mode_start" : "bfg_respawn_mode_checkpoint",
+                    LabelText = LocalizationService.Get(start ? "respawn.prompt_mode_start" : "respawn.prompt_mode_checkpoint"),
+                    OnPressed = ToggleQuickMode,
+                    IconAction = BfgBinds.RespawnMode.ActionId,
+                    IconCategory = RewiredConsts.Category.Default,
                 });
             _claimed = true;
         }
 
         private static void QuickRespawn()
         {
-            if (_respawning || RespawnMenu.AnyOpen) return;
+            if (_respawning) return;
             if (QuickModeIsStart) DoStartRespawn();
             else DoCheckpointRespawn();
-        }
-
-        private static void OpenRespawnMenu()
-        {
-            if (Instance == null || _respawning || RespawnMenu.AnyOpen) return;
-            Instance.StartCoroutine(RespawnMenu.OpenRoutine().WrapToIl2Cpp());
         }
 
         private static void DestroyPrompt()
@@ -350,132 +299,6 @@ namespace BetterFG.Tweaks
             activeState.End(-1);
             if (resetTime) FeatureQualificationTime.ResetElapsedBaseline();
             _respawning = false;
-        }
-    }
-
-    // reuses the game's own UGC "report level" popup, same trick as LevelPortReportMenu: relabel the
-    // first two report-reason rows to Checkpoint / Start, hide the rest, point them at the two
-    // ImmediateRespawnTweak teleport paths. nothing here ever touches moderation.
-    internal static class RespawnMenu
-    {
-        internal static bool AnyOpen => _popupVm != null && _popupVm.gameObject.activeInHierarchy;
-
-        private static bool _armed;
-        private static ReportUGCPopupViewModel _popupVm;
-        private static ReportUGCConfigurationElementViewModel _checkpointElem, _startElem;
-
-        internal static IEnumerator OpenRoutine()
-        {
-            var rm = SingletonBehaviour<ReportManager>.Instance;
-            if (rm == null) yield break;
-
-            _armed = false;
-            rm.OpenVisualReportUGCPopup("Respawn", "", 0, false);
-
-            ReportUGCPopupViewModel vm = null;
-            for (int i = 0; i < 12 && vm == null; i++) { yield return null; vm = FindLivePopup(); }
-            if (vm == null) yield break;
-            _popupVm = vm;
-            yield return null; // let Setup() build the rows
-
-            Apply(vm);
-
-            yield return null;
-            _armed = true;
-        }
-
-        private static ReportUGCPopupViewModel FindLivePopup()
-        {
-            foreach (var v in Resources.FindObjectsOfTypeAll<ReportUGCPopupViewModel>())
-                if (v != null && v.gameObject.scene.IsValid()) return v;
-            return null;
-        }
-
-        private static void Apply(ReportUGCPopupViewModel vm)
-        {
-            var ih = vm._popupInputHandler;
-            var elems = ih != null ? ih._settingElements : null;
-            if (elems == null || elems.Count < 2) return;
-
-            _checkpointElem = elems[0];
-            _startElem = elems[1];
-
-            var content = elems[0].transform.parent;
-            for (int i = 0; i < content.childCount; i++)
-            {
-                var c = content.GetChild(i);
-                if (c.GetComponent<ReportUGCConfigurationElementViewModel>() == null)
-                    c.gameObject.SetActive(false); // the "Offensive ..." section headers
-            }
-
-            var variant = vm.transform.Find("Generic_UI_LE_ReportRoundPopup_Prefab_Variant");
-            if (variant != null)
-            {
-                SetText(variant, "TitleContainer/TitleText", "respawn.menu_title");
-                SetText(variant, "BodyText", "respawn.menu_body");
-                SetText(variant, "ButtonContainer/RightButton/Content/Text", "ui.confirm");
-                SetText(variant, "ButtonContainer/LeftButton/Content/Text", "ui.close");
-            }
-
-            WireRow(_checkpointElem, "respawn.checkpoint_label", PickCheckpoint);
-            WireRow(_startElem, "respawn.start_label", PickStart);
-            for (int i = 2; i < elems.Count; i++) elems[i].gameObject.SetActive(false);
-
-            if (vm._acceptButton != null)
-            {
-                vm._acceptButton.onClick.RemoveAllListeners();
-                vm._acceptButton.onClick.AddListener((UnityAction)(() =>
-                {
-                    var sel = ih.GetCurrentSelected();
-                    Fire(sel != null && sel == _startElem ? PickStart : PickCheckpoint);
-                }));
-            }
-        }
-
-        private static void PickCheckpoint() => ImmediateRespawnTweak.SetQuickMode(false);
-
-        private static void PickStart() => ImmediateRespawnTweak.SetQuickMode(true);
-
-        private static void Fire(Action act)
-        {
-            if (!_armed || act == null) return;
-            _armed = false;
-            act();
-            CloseMenu();
-        }
-
-        private static void SetText(Transform root, string path, string text)
-        {
-            var t = root.Find(path);
-            if (t == null) return;
-            var go = t.gameObject;
-            var loc = go.GetComponent("LocalisedStaticLabel")?.TryCast<Behaviour>();
-            if (loc != null) loc.enabled = false;
-            var bind = go.GetComponent("TMPTextBinding")?.TryCast<Behaviour>();
-            if (bind != null) bind.enabled = false;
-            var tmp = go.GetComponent<TMPro.TextMeshProUGUI>();
-            if (tmp != null) BettrFG.uGUI.UGUIShip.RelabelText(tmp, text);
-        }
-
-        private static void WireRow(ReportUGCConfigurationElementViewModel e, string label, Action act)
-        {
-            SetText(e.transform, "SettingsText", label);
-
-            var call = (UnityAction)(() => Fire(act));
-            e._OnPress?.RemoveAllListeners();
-            e.AddOnPressListener(call);
-
-            var btn = e.GetComponent<Button>();
-            if (btn != null)
-            {
-                btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(call);
-            }
-        }
-
-        private static void CloseMenu()
-        {
-            SingletonBehaviour<ReportManager>.Instance?.CloseVisualReportUGCPopup();
         }
     }
 }

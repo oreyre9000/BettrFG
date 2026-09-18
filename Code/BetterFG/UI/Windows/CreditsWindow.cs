@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
@@ -138,7 +138,7 @@ namespace BetterFG.UI.Windows
             lbl.horizontalOverflow = HorizontalWrapMode.Wrap;
             lbl.verticalOverflow = VerticalWrapMode.Overflow;
 
-            float h = Mathf.Max(ROW_H, lbl.preferredHeight + 6f);
+            float h = Mathf.Max(ROW_H, UGUIShip.PreferredHeight(lbl, LABEL_W) + 6f);
             le.preferredHeight = h;
             lbl.rectTransform.sizeDelta = new Vector2(LABEL_W, h);
         }

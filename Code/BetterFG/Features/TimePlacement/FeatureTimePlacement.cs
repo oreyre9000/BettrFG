@@ -1471,6 +1471,7 @@ namespace BetterFG.Features.TimePlacement
             if (parent == null) { Plugin.Log.LogInfo("TimePlacement: solo-toggle no overlay parent"); return; }
             _soloToggleprompt = NavPromptCore.From(glyph)
                 .WithLabel("Toggle squads / per-player", "bfg_tp_toggle_solosquad")
+                .Bind(BfgBinds.SquadsToggle)
                 .CustomAnchors(new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 0f),
                     new Vector2(PanelAnchoredPos.x + 40f, PanelAnchoredPos.y - 250f))
                 .SpawnOn(parent);

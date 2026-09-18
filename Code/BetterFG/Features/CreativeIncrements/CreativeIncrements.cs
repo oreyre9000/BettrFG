@@ -254,7 +254,7 @@ namespace BetterFG.Features.CreativeIncrements
         public static void Postfix()
         {
             CreativeIncrements.SetActive(false);
-            BetterFG.Features.NeonMaterial.NeonMaterial.OnParamMenuClosed();
+            BetterFG.Features.CreativeExpansion.NeonMaterial.OnParamMenuClosed();
         }
     }
 

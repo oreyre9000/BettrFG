@@ -76,7 +76,7 @@ namespace BetterFG.UI.Windows
             Rebuild();
         }
 
-        internal void RegisterBar(string trackName, RectTransform fillRt) => _bars.Add(trackName, fillRt);
+        internal void RegisterBar(string trackName, LoadingBar bar) => _bars.Add(trackName, bar);
 
         protected override void ManagedUpdate()
         {
@@ -296,7 +296,7 @@ namespace BetterFG.UI.Windows
                     window.StartDownload(track, ok => window.RefreshList())));
 
                 if (busy)
-                    window.RegisterBar(track.name, UGUIShip.CreateProgressBar(rowGo.transform, DL_COL));
+                    window.RegisterBar(track.name, UGUIShip.CreateLoadingBar(rowGo.transform, DL_COL));
             }
         }
 

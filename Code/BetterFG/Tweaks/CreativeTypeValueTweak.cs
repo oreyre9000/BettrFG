@@ -1,6 +1,6 @@
 using System;
 using System.Globalization;
-using BetterFG.Features.CreativeGroups;
+using BetterFG.Features.CreativeExpansion;
 using BetterFG.Features.CreativeIncrements;
 using BetterFG.Features.UnityRound.Editor;
 using BetterFG.Services;
@@ -189,7 +189,7 @@ namespace BetterFG.Tweaks
 
         // the node the parameter menu's own input handler says is selected. same route CreativeIncrements
         // takes to the handler, so no scene scan
-        private static ParameterNodeViewModelString SelectedNode()
+        internal static ParameterNodeViewModelString SelectedNode()
         {
             var vm = LevelEditorParameterMenuViewModel._instance;
             if (vm == null) return null;

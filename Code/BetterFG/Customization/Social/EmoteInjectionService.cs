@@ -177,11 +177,14 @@ namespace BetterFG.Customization.Social
 
         internal static void InjectSlots(SocialPrimeHandler handler)
         {
+            var slots = ResolveSlots(handler);
+            if (slots != null) InjectInto(slots);
+        }
+
+        internal static void InjectInto(Il2CppSystem.Collections.Generic.List<ItemDefinitionSO> slots)
+        {
             try
             {
-                var slots = ResolveSlots(handler);
-                if (slots == null) return;
-
                 int injected = 0;
                 foreach (var e in _entries)
                 {

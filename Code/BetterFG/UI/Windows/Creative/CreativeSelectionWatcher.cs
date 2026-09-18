@@ -21,6 +21,8 @@ namespace BetterFG.UI.Windows.Creative
 
         private NavPromptHandle _prompt;
         private bool _promptIsLink;
+        private int _lastSelCount = -1;
+        private bool _linkInSelection;
 
         void Awake()
         {
@@ -41,7 +43,8 @@ namespace BetterFG.UI.Windows.Creative
             if (handler == null) { DestroyPrompt(); return; }
             if (handler.IsPlacingOrCloning) return;
 
-            bool shouldPrompt = BatchEditWindow.FeatureEnabled && UnityRoundLoader.InLevelEditor && BatchRecolour.SelectionCount() >= 1;
+            int selCount = BatchRecolour.SelectionCount();
+            bool shouldPrompt = BatchEditWindow.FeatureEnabled && UnityRoundLoader.InLevelEditor && selCount >= 1;
 
             // turned off while the window's up → close it
             if (!BatchEditWindow.FeatureEnabled && BatchEditWindow.Instance != null)
@@ -49,7 +52,16 @@ namespace BetterFG.UI.Windows.Creative
 
             // the label has to say "Link" the moment a controller joins the selection, otherwise there's
             // nothing telling you the page exists. NavPrompt labels are baked at spawn, so flip = respawn.
-            bool linkNow = shouldPrompt && BatchLink.Controller() != null;
+            // ponytail: Controller() walks the whole selection with two interop calls per object, so a
+            // 200-object selection paid that every frame just to pick a label. Re-ask only when the
+            // count moves; swapping one object for another at the same count keeps the old label until
+            // the next change. Key it on a real selection-version signal if that ever bites.
+            if (selCount != _lastSelCount)
+            {
+                _lastSelCount = selCount;
+                _linkInSelection = shouldPrompt && BatchLink.Controller() != null;
+            }
+            bool linkNow = shouldPrompt && _linkInSelection;
             if (linkNow != _promptIsLink) { DestroyPrompt(); _promptIsLink = linkNow; }
 
             if (shouldPrompt) EnsurePrompt();
@@ -62,7 +74,10 @@ namespace BetterFG.UI.Windows.Creative
         void LateUpdate()
         {
             if (!UnityRoundLoader.InLevelEditor) return;
-            Features.CreativeGroups.CreativeGroups.TickGroupDrag();
+            Features.CreativeExpansion.CreativeGroups.TickGroupDrag();
+            Features.CreativeExpansion.RuleColours.Tick();
+            Features.CreativeExpansion.SlimeColours.Tick();
+            Features.CreativeExpansion.ObjectThemes.Tick();
         }
 
         private void EnsurePrompt()

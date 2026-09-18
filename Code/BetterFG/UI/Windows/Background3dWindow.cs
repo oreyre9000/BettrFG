@@ -168,7 +168,7 @@ namespace BetterFG.UI.Windows
             if (!busy) return;
 
             // only exists while the bundle's in flight — the rebuild on completion takes it away
-            _bars.Add(bundle, UGUIShip.CreateProgressBar(rowGo.transform, DL_COL));
+            _bars.Add(bundle, UGUIShip.CreateLoadingBar(rowGo.transform, DL_COL));
         }
 
         private IEnumerator Grab(string bundle)

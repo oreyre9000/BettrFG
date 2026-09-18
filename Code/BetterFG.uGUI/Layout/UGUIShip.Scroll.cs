@@ -155,31 +155,6 @@ namespace BettrFG.uGUI
             return btn;
         }
 
-        // hairline progress track along the bottom of a row, fill runs left to right. caller drives
-        // the returned fill's anchorMax.x from 0..1 each frame while the download is in flight.
-        public static RectTransform CreateProgressBar(Transform parent, Color fillColor)
-        {
-            var trackGo = new GameObject("Bar");
-            trackGo.transform.SetParent(parent, false);
-            var trackRt = trackGo.AddComponent<RectTransform>();
-            trackRt.anchorMin = new Vector2(0f, 0f);
-            trackRt.anchorMax = new Vector2(1f, 0f);
-            trackRt.pivot = new Vector2(0.5f, 0f);
-            trackRt.offsetMin = Vector2.zero;
-            trackRt.offsetMax = new Vector2(0f, 2f);
-            trackGo.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.08f);
-
-            var fillGo = new GameObject("Fill");
-            fillGo.transform.SetParent(trackGo.transform, false);
-            var fillRt = fillGo.AddComponent<RectTransform>();
-            fillRt.anchorMin = Vector2.zero;
-            fillRt.anchorMax = new Vector2(0f, 1f);
-            fillRt.pivot = new Vector2(0f, 0.5f);
-            fillRt.offsetMin = fillRt.offsetMax = Vector2.zero;
-            fillGo.AddComponent<Image>().color = fillColor;
-            return fillRt;
-        }
-
         public static void PaintListRow(Button row, int index, bool selected)
         {
             if (row == null) return;

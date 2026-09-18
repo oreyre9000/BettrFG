@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using BetterFG.Services;
@@ -72,7 +72,7 @@ namespace BetterFG.Features
 
         string key => "feature." + id;
 
-        public bool enabled => SettingsService.Get(key, defaultOn ? "true" : "false") == "true";
+        public bool enabled => !BetterFG.Utilities.FeatureAvailability.Off(id) && SettingsService.Get(key, defaultOn ? "true" : "false") == "true";
 
         public void SetEnabled(bool on)
         {

@@ -22,6 +22,7 @@ namespace BetterFG.UI.Windows.Creative
             public Vector3? Scale;
             public Vector3? Position;
             public Color? Colour;      // rgb changer colour
+            public LevelEditorColourPalette Palette;
             public int? SurfaceIndex;  // surface/material index
             public int? VisibilityParam;   // visibility option index
             public bool? CollisionEnabled; // collision on/off

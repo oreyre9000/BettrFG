@@ -11,9 +11,9 @@
         public static bool IsPublicRelease => true;
 #endif
 
-        public static string Version => MyPluginInfo.PLUGIN_VERSION;
+        public static string Version => VersionLabel;
 
-        public static string WatermarkLine1 => "https://github.com/oreyre9000/BettrFG";
+        public static string WatermarkLine1 = "https://github.com/oreyre9000/BettrFG";
         // the "BettrFG" name is rendered as the logo image (see AddWatermarkLogoLine);
         // this is the rest of the line that follows it.
         public static string BuildWord = "build";

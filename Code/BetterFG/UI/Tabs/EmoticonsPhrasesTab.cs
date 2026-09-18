@@ -283,7 +283,15 @@ namespace BetterFG.UI.Tabs
             }
         }
 
-        public override void OnOpened() { _wheelTarget = 1f; _userOpenedOnce = true; RefreshWheelSlots(); SpawnPrimeVisualizer(); }
+        public override void OnOpened()
+        {
+            _emoticonEntries = EmoticonSettingsService.Load();
+            EmoticonInjectionService.SetEntries(_emoticonEntries);
+            foreach (var tex in _emoticonPreviewTextures.Values) if (tex != null) Destroy(tex);
+            _emoticonPreviewTextures.Clear();
+            RefreshEmoticonList();
+            _wheelTarget = 1f; _userOpenedOnce = true; RefreshWheelSlots(); SpawnPrimeVisualizer();
+        }
         public override void OnClosed() { _wheelTarget = 0f; DestroyPrimeVisualizer(); }
 
         // ── Real wheel visualizer ─────────────────────────────────────────────

@@ -66,7 +66,7 @@ namespace BetterFG.UI.Windows.Creative
                 var obj = kv.Key;
                 if (obj == null) continue;
                 var rgb = BatchTargets.GetColourParam(obj);
-                if (rgb != null) rgb.SetColour(Modify(kv.Value, brightness, contrast, hue, saturation));
+                if (rgb != null) rgb.SetPaletteAndColour(null, Modify(kv.Value, brightness, contrast, hue, saturation));
             }
         }
 
@@ -78,7 +78,7 @@ namespace BetterFG.UI.Windows.Creative
                 var obj = kv.Key;
                 if (obj == null) continue;
                 var rgb = BatchTargets.GetColourParam(obj);
-                if (rgb != null) rgb.SetColour(colour);
+                if (rgb != null) rgb.SetPaletteAndColour(null, colour);
             }
         }
     }

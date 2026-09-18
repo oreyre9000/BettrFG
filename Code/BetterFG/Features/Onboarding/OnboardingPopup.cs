@@ -79,7 +79,8 @@ namespace BetterFG.Features.Onboarding
         // the bottom-right corner, so the last spec is the primary action.
         public static GameObject Show(Canvas canvas, string titleId, string bodyId,
             Vector2 pos, Vector2 pivot, ButtonSpec[] buttons,
-            string inputInitial = null, Action<UnityEngine.UI.InputField> onInput = null)
+            string inputInitial = null, Action<UnityEngine.UI.InputField> onInput = null,
+            Action<LoadingBar> onBar = null, Action<Text> onBody = null)
         {
             var canvasRt = canvas.GetComponent<RectTransform>();
             int nBtn = buttons != null ? buttons.Length : 0;
@@ -128,9 +129,11 @@ namespace BetterFG.Features.Onboarding
             // line count at this width, size the panel to it instead of guessing.
             float bodyH = Mathf.Max(UGUIShip.PreferredHeight(body, innerW), FsBody * 2f);
             body.rectTransform.sizeDelta = new Vector2(innerW, bodyH);
+            onBody?.Invoke(body);
 
             bool wantInput = inputInitial != null;
-            float inputBlock = wantInput ? GapBodyButtons + InputH : 0f;
+            bool wantBar = onBar != null;
+            float inputBlock = wantInput || wantBar ? GapBodyButtons + InputH : 0f;
             float height = bodyTop + bodyH + inputBlock
                            + (nBtn > 0 ? GapBodyButtons + BtnH : 0f) + PadBottom;
             rt.sizeDelta = new Vector2(Width, height);
@@ -151,6 +154,11 @@ namespace BetterFG.Features.Onboarding
                 frt.pivot = new Vector2(0f, 1f);
                 frt.anchoredPosition = new Vector2(PadX, -(bodyTop + bodyH + GapBodyButtons));
                 onInput?.Invoke(field);
+            }
+            else if (wantBar)
+            {
+                onBar(UGUIShip.CreateLoadingBar(root.transform,
+                    new Rect(PadX, bodyTop + bodyH + GapBodyButtons + 3f, innerW, InputH - 6f), BtnPrimary));
             }
 
             float bx = BtnOverhangX;

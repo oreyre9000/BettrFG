@@ -32,9 +32,6 @@ namespace BetterFG.UI.Tabs
         private static readonly Color BTN_GREEN = new Color(0.25f, 0.5f, 0.25f, 1f);
         private static readonly Color BTN_RED = new Color(0.45f, 0.25f, 0.25f, 1f);
 
-        private const string PATH_KEY = "unityround.editor.jsonpath";
-        private const string SHARE_URL_KEY = "unityround.editor.shareurl";
-
         private enum SubTab { Args, UnityRound }
         // remembered across rebuilds so drilling into the Custom Textures tab and coming back lands
         // you on the same subtab + wizard step you left (a rebuilt tab is a fresh instance)
@@ -228,8 +225,8 @@ namespace BetterFG.UI.Tabs
             float fieldW = w - browseW - PAD;
             _pathField = UGUIShip.CreateInputField(root.transform, new Rect(PAD, cy, fieldW, BTN_H),
                 "ui.c_path_to_info_json", new Color(0.12f, 0.12f, 0.12f, 1f), WHITE, FS_SM);
-            UGUIShip.SetInputText(_pathField, SettingsService.Get(PATH_KEY, ""), false);
-            _pathField.onEndEdit.AddListener(new Action<string>(v => SettingsService.Set(PATH_KEY, v ?? "")));
+            UGUIShip.SetInputText(_pathField, SettingsService.Get(UnityRoundLoader.PathSettingKey, ""), false);
+            _pathField.onEndEdit.AddListener(new Action<string>(v => SettingsService.Set(UnityRoundLoader.PathSettingKey, v ?? "")));
 
             UGUIShip.CreateButton(root.transform, new Rect(PAD + fieldW + PAD, cy, browseW, BTN_H),
                 "ui.browse_2", BTN_BLUE, WHITE, FS_SM, new Action(OnBrowse));
@@ -306,8 +303,8 @@ namespace BetterFG.UI.Tabs
             _shareUrlField = UGUIShip.CreateInputField(root.transform, new Rect(PAD, cy, w, BTN_H),
                 "ui.paste_the_github_link_to_your_level_s_info_json",
                 new Color(0.12f, 0.12f, 0.12f, 1f), WHITE, FS_SM);
-            UGUIShip.SetInputText(_shareUrlField, SettingsService.Get(SHARE_URL_KEY, ""), false);
-            _shareUrlField.onEndEdit.AddListener(new Action<string>(v => SettingsService.Set(SHARE_URL_KEY, v ?? "")));
+            UGUIShip.SetInputText(_shareUrlField, SettingsService.Get(UnityRoundLoader.ShareUrlSettingKey, ""), false);
+            _shareUrlField.onEndEdit.AddListener(new Action<string>(v => SettingsService.Set(UnityRoundLoader.ShareUrlSettingKey, v ?? "")));
             cy += BTN_H + SH;
 
             UGUIShip.CreateButton(root.transform, new Rect(PAD, cy, w, BTN_H),
@@ -319,10 +316,10 @@ namespace BetterFG.UI.Tabs
 
         void OnSetDescription()
         {
-            string url = _shareUrlField != null ? _shareUrlField.text : SettingsService.Get(SHARE_URL_KEY, "");
-            SettingsService.Set(SHARE_URL_KEY, url ?? "");
+            string url = _shareUrlField != null ? _shareUrlField.text : SettingsService.Get(UnityRoundLoader.ShareUrlSettingKey, "");
+            SettingsService.Set(UnityRoundLoader.ShareUrlSettingKey, url ?? "");
 
-            string code = ShareCodeFromUrl(url);
+            string code = UnityRoundLoader.ShareCodeFromUrl(url);
             if (string.IsNullOrEmpty(code)) { SetShareStatus("ui.bad_link_need_a_github_link_to_a_rounds_round_xx", ERR); return; }
 
             if (UnityRoundLoader.SetLevelDescription(code, out string error))
@@ -338,51 +335,20 @@ namespace BetterFG.UI.Tabs
             _shareStatus.color = col;
         }
 
-        // turn a github link to a level's info.json into the owner/repo/round_xxx description code.
-        // accepts both the browser link (github.com/owner/repo/blob/branch/Rounds/round_xxx/info.json)
-        // and the raw link (raw.githubusercontent.com/owner/repo/branch/Rounds/round_xxx/info.json).
-        static string ShareCodeFromUrl(string url)
-        {
-            if (string.IsNullOrWhiteSpace(url)) return "";
-            url = url.Trim().Trim('"');
-
-            // chop off whichever github host prefix is there, leaving owner/repo/.../round_xxx/...
-            string rest = null;
-            foreach (var host in new[] { "raw.githubusercontent.com/", "github.com/" })
-            {
-                int i = url.IndexOf(host, StringComparison.OrdinalIgnoreCase);
-                if (i >= 0) { rest = url.Substring(i + host.Length); break; }
-            }
-            if (rest == null) return "";
-
-            var parts = rest.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2) return "";
-            string owner = parts[0];
-            string repo = parts[1];
-
-            // grab whatever segment is the round_ folder, so blob/branch/Rounds in between don't matter
-            string round = null;
-            foreach (var p in parts)
-                if (p.StartsWith("round_", StringComparison.OrdinalIgnoreCase)) { round = p; break; }
-            if (string.IsNullOrEmpty(round)) return "";
-
-            return $"{owner}/{repo}/{round}";
-        }
-
         void OnBrowse()
         {
             WinDialogs.PickFile("Select round info.json", path =>
             {
                 if (string.IsNullOrEmpty(path)) return;
                 UGUIShip.SetInputText(_pathField, path, false);
-                SettingsService.Set(PATH_KEY, path);
+                SettingsService.Set(UnityRoundLoader.PathSettingKey, path);
             });
         }
 
         void OnLoad()
         {
-            string path = _pathField != null ? _pathField.text : SettingsService.Get(PATH_KEY, "");
-            SettingsService.Set(PATH_KEY, path ?? "");
+            string path = _pathField != null ? _pathField.text : SettingsService.Get(UnityRoundLoader.PathSettingKey, "");
+            SettingsService.Set(UnityRoundLoader.PathSettingKey, path ?? "");
             if (UnityRoundLoader.LoadFromInfoJson(path, out string error))
                 SetStatus($"loaded: {UnityRoundLoader.Spawned?.name}", OK);
             else SetStatus($"error: {error}", ERR);

@@ -125,7 +125,7 @@ namespace BetterFG.UI.Windows.Creative
             if (template.Colour.HasValue)
             {
                 var rgb = GetColourParam(obj);
-                if (rgb != null) into.Colour = rgb.CurrentColour;
+                if (rgb != null) { into.Colour = rgb.CurrentColour; into.Palette = rgb.CurrentPalette; }
             }
             if (template.SurfaceIndex.HasValue)
             {
@@ -165,20 +165,12 @@ namespace BetterFG.UI.Windows.Creative
             if (snap.Colour.HasValue)
             {
                 var rgb = GetColourParam(obj);
-                if (rgb != null) rgb.SetColour(snap.Colour.Value);
+                if (rgb != null) rgb.SetPaletteAndColour(snap.Palette, snap.Colour.Value);
             }
             if (snap.SurfaceIndex.HasValue)
             {
                 var surf = GetSurfaceParam(obj);
-                if (surf != null)
-                {
-                    int index = snap.SurfaceIndex.Value;
-                    // index 0 is the "no surface" sentinel (see BatchMaterial.Apply), not a real
-                    // position in _enabledSurfaces — looking it up there returns whatever surface
-                    // happens to sit at slot 0 instead of clearing back to none.
-                    var so = index == 0 ? null : surf._enabledSurfaces?.GetSurfaceByIndex(index);
-                    ApplySurfaceIndex(surf, index, so, refreshResponders: so == null);
-                }
+                if (surf != null) ApplySurfaceIndex(surf, snap.SurfaceIndex.Value);
             }
             if (snap.VisibilityParam.HasValue)
             {
@@ -213,7 +205,7 @@ namespace BetterFG.UI.Windows.Creative
             if (vis != null) { vis.VisibilityParam = 0; vis.ApplyVisibilityParam(true); }
 
             var col = GetCollisionParam(lepo);
-            if (col != null) { col._collisionEnabled = false; col.ApplyCollisionParam(true); }
+            if (col != null) { col._collisionEnabled = false; col.ApplyCollisionParam(false); }
         }
 
         public static void ApplyWeight(LevelEditorPhysicsObjectParameter phys, int index)
@@ -233,21 +225,10 @@ namespace BetterFG.UI.Windows.Creative
             unlit.SetUnlitMode(enabled);
         }
 
-        // apply a surface SO directly and set the selected-index backing field, bypassing
-        // SetParameterIndex (whose updateResponders path NREs via UpdateParameterEntriesUI when the
-        // param menu isn't open). refreshResponders drives OnParameterIndexChanged so the change shows
-        // immediately — needed to CLEAR to none (ApplySurface(null) alone doesn't repaint until reselect),
-        // but it breaks applying a real surface like slime, so slime uses ApplySurface alone.
-        public static void ApplySurfaceIndex(LevelEditorSurfaceDefinitionParameter surf, int index,
-            LevelEditorSurfaceDefinitionSO so, bool refreshResponders)
+        public static void ApplySurfaceIndex(LevelEditorSurfaceDefinitionParameter surf, int index)
         {
-            surf._SelectedParameterIndex_k__BackingField = index;
-            surf.ApplySurface(so);
-            if (refreshResponders)
-            {
-                try { surf.OnParameterIndexChanged(index); }
-                catch (System.Exception ex) { Plugin.Log.LogWarning("BatchMaterial: OnParameterIndexChanged failed: " + ex.Message); }
-            }
+            try { surf.SetParameterIndex(index, true); }
+            catch (System.Exception ex) { Plugin.Log.LogWarning($"surface index {index} via SetParameterIndex threw: {ex.Message}"); }
         }
     }
 }

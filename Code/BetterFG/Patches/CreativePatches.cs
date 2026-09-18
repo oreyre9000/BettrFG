@@ -14,6 +14,18 @@ namespace BetterFG.Patches
     //
     // We also stash the live handler so the window can fire one PlaceMultiSelection a frame after it
     // closes — commits the selection cleanly instead of leaving you to work off the click backlog.
+    [HarmonyPatch(typeof(RewiredPlayerExtensions), nameof(RewiredPlayerExtensions.GetControllerMouseOrTouchDown))]
+    public class EditorUiLockRawMouseClickPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(ref bool __result)
+        {
+            if (!Services.FGInputLockService.EditorUiLocked) return true;
+            __result = false;
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(LevelEditorMultiSelectionHandler), "PlaceMultiSelection")]
     public class BatchEditBlockPlacePatch
     {
@@ -79,6 +91,8 @@ namespace BetterFG.Patches
             var max = b.max;
             min.y -= FloorDrop;
             __instance.MapPlacementBounds = new Bounds((min + max) * 0.5f, max - min);
+
+            BetterFG.Customization.UI.CreativeGizmoScale.Apply();
         }
     }
 }

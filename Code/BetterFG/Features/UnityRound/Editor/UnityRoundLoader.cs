@@ -6,7 +6,6 @@ using FGClient;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.SceneManagement;
 using static FG.Common.GameStateMachine;
 
 namespace BetterFG.Features.UnityRound.Editor
@@ -23,12 +22,18 @@ namespace BetterFG.Features.UnityRound.Editor
     public static class UnityRoundLoader
     {
         public const string HOLDER_NAME = "BetterFG_UnityRoundEditorHolder";
+        public const string PathSettingKey = "unityround.editor.jsonpath";
+        public const string ShareUrlSettingKey = "unityround.editor.shareurl";
 
         private static GameObject _holder;
         private static GameObject _spawned;
         private static AssetBundle _loadedBundle;
         private static bool _ownsBundle;   // false when we reused a bundle the game already had loaded
         private static string _loadedJsonPath;
+
+        private static long _infoFingerprint;
+        private static DateTime _bundleWriteTime;
+        private static long _bundleLength;
 
         private static bool _envCached;
         private static AmbientMode _oldAmbientMode;
@@ -46,18 +51,59 @@ namespace BetterFG.Features.UnityRound.Editor
         // true while we're sat in the level editor (creative). the Creative tab reads this.
         public static bool InLevelEditor;
 
+        public static bool Playtesting { get; private set; }
+
+        public static bool EditorPreview => InLevelEditor && !Playtesting;
+
+        public static void SetPlaytesting(bool on)
+        {
+            if (Playtesting == on) return;
+            Playtesting = on;
+            Reapply();
+        }
+
         // live "keep the editor's own placeables/background visible" toggle. normally comes from
         // info.json's keepExistingObjects; the Creative tab's Configuration step flips it at runtime.
         public static bool KeepExistingObjects { get; private set; }
+
+        public static bool HideFinishLines { get; private set; }
 
         // re-run the creative-object cull with the new keep flag. restore first so a false->true->false
         // walk doesn't leave anything double-disabled or stuck on.
         public static void SetKeepExistingObjects(bool keep)
         {
             KeepExistingObjects = keep;
+            Reapply();
+        }
+
+        public static bool HideBackground { get; private set; }
+
+        public static bool HideThemeLighting { get; private set; }
+
+        public static void SetHideThemeLighting(bool hide)
+        {
+            HideThemeLighting = hide;
+            Reapply();
+        }
+
+        public static void SetHideFinishLines(bool hide)
+        {
+            HideFinishLines = hide;
+            Reapply();
+        }
+
+        public static void SetHideBackground(bool hide)
+        {
+            HideBackground = hide;
+            Reapply();
+        }
+
+        private static void Reapply()
+        {
             if (_spawned == null) return;
-            BetterFGRoundPostmodifier.RestoreCreativeModeObjects();
-            BetterFGRoundPostmodifier.DisableCreativeModeObjects(disablePlaceables: true, keepExisting: keep);
+            BetterFGRoundPostmodifier.DisableCreativeModeObjects(disablePlaceables: true, keepExisting: KeepExistingObjects,
+                hideFinishLines: HideFinishLines, hideBackground: HideBackground, hideThemeLighting: HideThemeLighting);
+            BetterFG.Tweaks.Background3dTweak.ApplyIfWanted();
         }
 
         // ── share code in the level description ──────────────────────────────────
@@ -80,6 +126,35 @@ namespace BetterFG.Features.UnityRound.Editor
             if (i < 0) return null;
             string code = s.Substring(i + "BettrFG level".Length).Trim();
             return string.IsNullOrEmpty(code) ? null : code;
+        }
+
+        // turn a github link to a level's info.json into the owner/repo/round_xxx description code.
+        // accepts both the browser link (github.com/owner/repo/blob/branch/Rounds/round_xxx/info.json)
+        // and the raw link (raw.githubusercontent.com/owner/repo/branch/Rounds/round_xxx/info.json).
+        public static string ShareCodeFromUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return "";
+            url = url.Trim().Trim('"');
+
+            string rest = null;
+            foreach (var host in new[] { "raw.githubusercontent.com/", "github.com/" })
+            {
+                int i = url.IndexOf(host, StringComparison.OrdinalIgnoreCase);
+                if (i >= 0) { rest = url.Substring(i + host.Length); break; }
+            }
+            if (rest == null) return "";
+
+            var parts = rest.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2) return "";
+            string owner = parts[0];
+            string repo = parts[1];
+
+            string round = null;
+            foreach (var p in parts)
+                if (p.StartsWith("round_", StringComparison.OrdinalIgnoreCase)) { round = p; break; }
+            if (string.IsNullOrEmpty(round)) return "";
+
+            return $"{owner}/{repo}/{round}";
         }
 
         // write owner/repo/round_xxx into the current level's description via the editor's IO component.
@@ -181,13 +256,15 @@ namespace BetterFG.Features.UnityRound.Editor
             }
             catch (Exception ex) { error = "instantiate failed: " + ex.Message; return false; }
 
-            var scene = FindEditorScene();
-            if (scene.IsValid())
-                SceneManager.MoveGameObjectToScene(holder, scene);
+            UnityEngine.Object.DontDestroyOnLoad(holder);
 
             _spawned = instance;
             _loadedJsonPath = jsonPath;
             KeepExistingObjects = info.keepExistingObjects;
+            HideFinishLines = info.hideFinishLines;
+            HideBackground = info.hideBackground;
+            HideThemeLighting = info.hideThemeLighting;
+            RememberFingerprint(jsonPath, folder, info);
 
             // snapshot render settings before Apply clobbers them, so Unload can restore
             CacheEnvironmentOnce();
@@ -199,9 +276,6 @@ namespace BetterFG.Features.UnityRound.Editor
 
             // apply any custom obstacle textures saved in texture.json next to info.json
             ObstacleTextureLoader.LoadAndApplyForRound(jsonPath);
-
-            // remember this round for the current creative level so it auto-loads next time
-            CreativeRoundMemory.RememberLoaded(jsonPath);
 
             Plugin.Log.LogInfo($"UnityRoundLoader: loaded '{instance.name}' from {jsonPath}");
             return true;
@@ -238,7 +312,9 @@ namespace BetterFG.Features.UnityRound.Editor
             _loadedJsonPath = null;
 
             BetterFGRoundPostmodifier.RestoreCreativeModeObjects();
+            BetterFGRoundPostmodifier.ClearLiveEnvironment();
             RestoreEnvironment();
+            BetterFG.Tweaks.Background3dTweak.ApplyIfWanted();
         }
 
         private static void UnloadBundle()
@@ -276,6 +352,7 @@ namespace BetterFG.Features.UnityRound.Editor
 
         public static void ClearHolder()
         {
+            UnityRoundAnchors.DetachAll();
             if (_spawned != null) { UnityEngine.Object.Destroy(_spawned); _spawned = null; }
 
             // belt and braces: only ever one object in the holder
@@ -285,6 +362,71 @@ namespace BetterFG.Features.UnityRound.Editor
                 for (int i = t.childCount - 1; i >= 0; i--)
                     UnityEngine.Object.Destroy(t.GetChild(i).gameObject);
             }
+        }
+
+        // ── auto-refresh ──────────────────────────────────────────────────────────
+
+        private static void RememberFingerprint(string jsonPath, string folder, MapInfo info)
+        {
+            try { _infoFingerprint = QuickHash(File.ReadAllBytes(jsonPath)); }
+            catch { _infoFingerprint = 0; }
+
+            try
+            {
+                string bundlePath = Path.Combine(folder, info.file);
+                var fi = new FileInfo(bundlePath);
+                _bundleWriteTime = fi.LastWriteTimeUtc;
+                _bundleLength = fi.Length;
+            }
+            catch { _bundleWriteTime = default; _bundleLength = 0; }
+        }
+
+        public static void NoteInfoWritten()
+        {
+            if (_loadedJsonPath == null) return;
+            try { _infoFingerprint = QuickHash(File.ReadAllBytes(_loadedJsonPath)); } catch { }
+        }
+
+        private static long QuickHash(byte[] bytes)
+        {
+            long h = unchecked((long)1469598103934665603);
+            foreach (byte b in bytes) { h ^= b; h *= 1099511628211; }
+            return h;
+        }
+
+        public static void TickAutoRefresh()
+        {
+            if (_loadedJsonPath == null) return;
+            if (!File.Exists(_loadedJsonPath)) return;
+
+            long infoHash;
+            try { infoHash = QuickHash(File.ReadAllBytes(_loadedJsonPath)); }
+            catch { return; }
+
+            bool changed = infoHash != _infoFingerprint;
+
+            if (!changed)
+            {
+                try
+                {
+                    var info = BetterFGUnityRounds.ParseInfo(File.ReadAllText(_loadedJsonPath));
+                    string folder = Path.GetDirectoryName(_loadedJsonPath);
+                    string bundlePath = info != null && !string.IsNullOrEmpty(info.file) ? Path.Combine(folder, info.file) : null;
+                    if (bundlePath != null && File.Exists(bundlePath))
+                    {
+                        var fi = new FileInfo(bundlePath);
+                        changed = fi.LastWriteTimeUtc != _bundleWriteTime || fi.Length != _bundleLength;
+                    }
+                }
+                catch { }
+            }
+
+            if (!changed) return;
+
+            string path = _loadedJsonPath;
+            Plugin.Log.LogInfo($"unity round core: {Path.GetFileName(path)} changed on disk, auto-reloading");
+            if (!LoadFromInfoJson(path, out string error))
+                Plugin.Log.LogWarning($"unity round core: auto-reload failed: {error}");
         }
 
         // ── environment ─────────────────────────────────────────────────────────
@@ -337,19 +479,6 @@ namespace BetterFG.Features.UnityRound.Editor
             UI.Windows.ObstacleTextureWindow.Instance?.Close();
         }
 
-        private static Scene FindEditorScene()
-        {
-            int count = SceneManager.sceneCount;
-            for (int i = 0; i < count; i++)
-            {
-                var s = SceneManager.GetSceneAt(i);
-                if (!s.isLoaded) continue;
-                if (s.name.Contains("Fraggle") || s.name.Contains("FallGuy_") ||
-                    s.name.Contains("ugc") || s.name.Contains("Editor"))
-                    return s;
-            }
-            return SceneManager.GetActiveScene();
-        }
     }
 
 }

@@ -72,6 +72,16 @@ namespace BetterFG.UI
             if (toggledUI) BetterFGUIMan.Instance.SetVisible(!BetterFGUIMan.Instance.IsVisible);
             if (toggledWheel) SideWheel.SideWheelManager.Instance?.ToggleFromController();
 
+            // the on-screen keyboard owns the pad outright while it's up: same A button would
+            // otherwise both press a key and fire a real click wherever the cursor was parked.
+            if (OnScreenKeyboard.Tick(this))
+            {
+                if (_leftHeld) { mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero); _leftHeld = false; }
+                if (_rightHeld) { mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, IntPtr.Zero); _rightHeld = false; }
+                _scrollAccum = 0f;
+                return;
+            }
+
             bool editorUp = Windows.Creative.BatchEditWindow.AnyOpen
                             || Windows.Creative.PublishThumbnailWindow.StepActive
                             || ReplayViewer.Instance != null

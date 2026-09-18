@@ -18,23 +18,111 @@ namespace BetterFG.Features.UnityRound
     {
         public static void Apply(GameObject round, MapInfo info, ref Material pendingSkybox)
         {
+            _liveInfo = info;
+            _liveSkybox = pendingSkybox;
             ApplyEnvironment(info, ref pendingSkybox);
             // spawnpoint -> CheckpointZone injection removed; checkpoints come from the level editor now
             //RemapStartingPositions(round);
             RemapPhysicMaterials(round);
             DisableLightProbesOnAllRenderers();
             RegisterEndgoals(round);
-            BetterFGUnityRounds.Instance.StartCoroutine(DisableCreativeModeObjectsSoon(info != null && info.keepExistingObjects).WrapToIl2Cpp());
+            BetterFGUnityRounds.Instance.StartCoroutine(DisableCreativeModeObjectsSoon(
+                info != null && info.keepExistingObjects, info != null && info.hideFinishLines,
+                info != null && info.hideBackground, info != null && info.hideThemeLighting).WrapToIl2Cpp());
             RegisterMantleTargets(round);
+            FreezeAnimations(round);
+            UnityRoundAnchors.Sync();
+        }
+
+        private static MapInfo _liveInfo;
+        private static Material _liveSkybox;
+
+        // the vanilla Background_ root's own LevelEditorThemeLighting.Apply overwrites RenderSettings
+        // with its own skybox/ambient after ours; CustomBackgroundThemeLightingPatch calls this the
+        // moment that happens so ours wins back, instead of guessing how many frames to wait.
+        public static void ReassertEnvironmentIfLoaded()
+        {
+            if (_liveInfo == null || !_liveInfo.hideBackground) return;
+            var skybox = _liveSkybox;
+            ApplyEnvironment(_liveInfo, ref skybox);
+        }
+
+        public static void ClearLiveEnvironment()
+        {
+            _liveInfo = null;
+            _liveSkybox = null;
+        }
+
+        private static readonly System.Collections.Generic.List<Animator> _animators
+            = new System.Collections.Generic.List<Animator>();
+        private static readonly System.Collections.Generic.List<Animation> _animations
+            = new System.Collections.Generic.List<Animation>();
+
+        public static void FreezeAnimations(GameObject round)
+        {
+            _animators.Clear();
+            _animations.Clear();
+            if (round == null) return;
+
+            foreach (var a in round.GetComponentsInChildren<Animator>(true))
+            {
+                _animators.Add(a);
+                a.Rebind();
+                a.Update(0f);
+                a.enabled = false;
+            }
+
+            foreach (var a in round.GetComponentsInChildren<Animation>(true))
+            {
+                _animations.Add(a);
+                a.Rewind();
+                a.Stop();
+            }
+        }
+
+        public static void StartAnimations()
+        {
+            foreach (var a in _animators)
+            {
+                if (a == null) continue;
+                a.enabled = true;
+                a.Rebind();
+                a.Update(0f);
+            }
+
+            foreach (var a in _animations)
+            {
+                if (a == null) continue;
+                a.Rewind();
+                a.Play();
+            }
+        }
+
+        public static void RefreezeAnimations()
+        {
+            foreach (var a in _animators)
+            {
+                if (a == null) continue;
+                a.Rebind();
+                a.Update(0f);
+                a.enabled = false;
+            }
+
+            foreach (var a in _animations)
+            {
+                if (a == null) continue;
+                a.Rewind();
+                a.Stop();
+            }
         }
 
         // the Background_ roots aren't in the scene yet the frame the round goes in, so disabling right
-        // here found nothing and left the CutoutSphere wrapping the level (skybox hidden behind it) and
-        // the LIGHTING sun burning
-        private static IEnumerator DisableCreativeModeObjectsSoon(bool keepExisting)
+        // here found nothing
+        private static IEnumerator DisableCreativeModeObjectsSoon(bool keepExisting, bool hideFinishLines, bool hideBackground, bool hideThemeLighting)
         {
             for (int i = 0; i < 5; i++) yield return null;
-            DisableCreativeModeObjects(disablePlaceables: true, keepExisting: keepExisting);
+            DisableCreativeModeObjects(disablePlaceables: true, keepExisting: keepExisting, hideFinishLines: hideFinishLines,
+                hideBackground: hideBackground, hideThemeLighting: hideThemeLighting);
         }
 
         private static void ApplyEnvironment(MapInfo info, ref Material pendingSkybox)
@@ -54,7 +142,6 @@ namespace BetterFG.Features.UnityRound
                 pendingSkybox = null;
             }
 
-            Plugin.Log.LogInfo($"BetterFGRoundPostmodifier: env applied (ambientMode={info.ambientMode} fog={info.fog})");
         }
 
         // spawnpoint -> CheckpointZone injection commented out; checkpoints now come from the level editor.
@@ -152,7 +239,6 @@ namespace BetterFG.Features.UnityRound
                     case "Slime": slime = key; break;
                 }
             }
-            int count = 0;
             foreach (var col in round.GetComponentsInChildren<Collider>(includeInactive: true))
             {
                 if (col.material == null) continue;
@@ -166,10 +252,8 @@ namespace BetterFG.Features.UnityRound
 
                 if (replacement == null) continue;
                 col.material = replacement;
-                count++;
             }
 
-            Plugin.Log.LogInfo($"BetterFGRoundPostmodifier: remapped {count} physic materials");
         }
 
         // exactly what we switched off, so restore is precise + symmetric
@@ -181,52 +265,83 @@ namespace BetterFG.Features.UnityRound
             = new System.Collections.Generic.List<(Renderer, Il2CppReferenceArray<Material>)>();
 
         // Operates only on scene 0's ROOT objects (no deep recursion - that was breaking stuff).
-        // Always kills the Background LIGHTING + CutoutSphere children.
-        // When not keepExisting, also disables Background_ roots and Placeable_/PB_ roots.
-        public static void DisableCreativeModeObjects(bool disablePlaceables, bool keepExisting = false)
+        // hideBackground owns the Background_ roots; keepExisting owns the Placeable_/PB_ roots.
+        public static void DisableCreativeModeObjects(bool disablePlaceables, bool keepExisting = false, bool hideFinishLines = false,
+            bool hideBackground = false, bool hideThemeLighting = false)
         {
-            _disabled.Clear();
+            RestoreCreativeModeObjects();
 
             var s = SceneManager.GetSceneAt(0);
             if (!s.isLoaded) return;
 
             foreach (var root in s.GetRootGameObjects())
+                ApplyRules(root, disablePlaceables, keepExisting, hideFinishLines, hideBackground, hideThemeLighting);
+        }
+
+        public static void ApplyToNewObject(GameObject root)
+        {
+            if (root == null || !Editor.UnityRoundLoader.HasSpawned) return;
+            ApplyRules(root, true, Editor.UnityRoundLoader.KeepExistingObjects, Editor.UnityRoundLoader.HideFinishLines,
+                Editor.UnityRoundLoader.HideBackground, Editor.UnityRoundLoader.HideThemeLighting);
+        }
+
+        private static void ApplyRules(GameObject root, bool disablePlaceables, bool keepExisting, bool hideFinishLines,
+            bool hideBackground, bool hideThemeLighting)
+        {
+            string n = root.name;
+
+            if (n.StartsWith("Background_"))
             {
-                string n = root.name;
-
-                if (n.StartsWith("Background_"))
-                {
-                    // lighting + cutout always go, even when keeping existing objects
-                    Disable(FindChild(root.transform, "LIGHTING"));
-                    Disable(FindChild(root.transform, "CutoutSphere"));
-                    if (!keepExisting) Disable(root);
-                    continue;
-                }
-
-                if (keepExisting || !disablePlaceables) continue;
-
-                if (n.StartsWith("Placeable_") || n.StartsWith("PB_"))
-                {
-                    // keep checkpoints / spawnpoints alive so the round stays playable
-                    bool keep = n.IndexOf("checkpoint", StringComparison.OrdinalIgnoreCase) >= 0
-                             || n.IndexOf("spawnpoint", StringComparison.OrdinalIgnoreCase) >= 0;
-                    if (keep) continue;
-
-                    // in the editor the finish line stays up so you can still see where the round ends,
-                    // just ghosted. a real round switches it off like everything else
-                    if (Editor.UnityRoundLoader.InLevelEditor
-                        && n.IndexOf("Floor", StringComparison.OrdinalIgnoreCase) >= 0
-                        && n.IndexOf("End", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        Ghost(root);
-                        continue;
-                    }
-
-                    Disable(root);
-                }
+                if (hideThemeLighting) Disable(root.transform.Find("LIGHTING"));
+                if (!hideBackground) return;
+                BetterFG.Tweaks.Background3dTweak.Cancel();
+                Disable(root);
+                return;
             }
 
-            Plugin.Log.LogInfo($"BetterFGRoundPostmodifier: disabled {_disabled.Count} objects, {_ghosted.Count} renderers ghosted (keepExisting={keepExisting})");
+            bool isPlaceable = n.StartsWith("Placeable_") || n.StartsWith("PB_");
+            bool isFinishLine = isPlaceable
+                && n.IndexOf("Floor", StringComparison.OrdinalIgnoreCase) >= 0
+                && n.IndexOf("End", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (keepExisting && hideFinishLines && isFinishLine)
+            {
+                if (Editor.UnityRoundLoader.EditorPreview) Ghost(root); else HideRenderers(root);
+                return;
+            }
+
+            if (keepExisting || !disablePlaceables || !isPlaceable) return;
+
+            // keep checkpoints / spawnpoints alive so the round stays playable, and the Unity
+            // Round Core gizmo alive so it can still be selected to configure the loaded round
+            bool keep = n.IndexOf("checkpoint", StringComparison.OrdinalIgnoreCase) >= 0
+                     || n.IndexOf("spawnpoint", StringComparison.OrdinalIgnoreCase) >= 0
+                     || BetterFG.Features.CreativeExpansion.CustomLights.IsLightGO(root)
+                     || BetterFG.Features.UnityRound.UnityRoundCoreObject.IsCore(root.GetComponent<LevelEditorPlaceableObject>())
+                     || UnityRoundAnchors.IsAnchor(root.GetComponent<LevelEditorPlaceableObject>())
+                     || BetterFG.UI.Windows.Creative.BatchLink.IsController(root.GetComponent<LevelEditorPlaceableObject>());
+            if (keep) return;
+
+            if (isFinishLine)
+            {
+                if (Editor.UnityRoundLoader.EditorPreview) Ghost(root); else HideRenderers(root);
+                return;
+            }
+
+            Disable(root);
+        }
+
+        private static readonly System.Collections.Generic.List<Renderer> _hiddenRenderers
+            = new System.Collections.Generic.List<Renderer>();
+
+        private static void HideRenderers(GameObject root)
+        {
+            foreach (var r in root.GetComponentsInChildren<Renderer>(includeInactive: true))
+            {
+                if (r.forceRenderingOff) continue;
+                r.forceRenderingOff = true;
+                _hiddenRenderers.Add(r);
+            }
         }
 
         private static void Ghost(GameObject root)
@@ -257,6 +372,10 @@ namespace BetterFG.Features.UnityRound
             foreach (var (r, mats) in _ghosted)
                 if (r != null) r.sharedMaterials = mats;
             _ghosted.Clear();
+
+            foreach (var r in _hiddenRenderers)
+                if (r != null) r.forceRenderingOff = false;
+            _hiddenRenderers.Clear();
         }
 
         private static void Disable(Transform t) { if (t != null) Disable(t.gameObject); }
@@ -267,24 +386,11 @@ namespace BetterFG.Features.UnityRound
             _disabled.Add(go);
         }
 
-        // first descendant with the given name (any depth)
-        private static Transform FindChild(Transform t, string name)
-        {
-            if (t.name == name) return t;
-            for (int i = 0; i < t.childCount; i++)
-            {
-                var found = FindChild(t.GetChild(i), name);
-                if (found != null) return found;
-            }
-            return null;
-        }
-
         private static void RegisterMantleTargets(GameObject round)
         {
             if (round == null) return;
 
             var rng = new System.Random();
-            int count = 0;
             foreach (var col in round.GetComponentsInChildren<Collider>(includeInactive: true))
             {
                 var go = col.gameObject;
@@ -292,15 +398,11 @@ namespace BetterFG.Features.UnityRound
                 id._hashID = (uint)rng.Next(1000, 15001);
                 id.Type = OfflineGrabTargetID.OfflineGrabTargetIDType.Mantle;
                 id.RegisterGeometryHashIDIfValid();
-                count++;
             }
-
-            Plugin.Log.LogInfo($"BetterFGRoundPostmodifier: registered {count} mantle targets");
         }
 
         private static void DisableLightProbesOnAllRenderers()
         {
-            int count = 0;
             int sceneCount = SceneManager.sceneCount;
             for (int si = 0; si < sceneCount; si++)
             {
@@ -309,10 +411,9 @@ namespace BetterFG.Features.UnityRound
                 foreach (var root in s.GetRootGameObjects())
                 {
                     var renderers = root.GetComponentsInChildren<Renderer>(includeInactive: true);
-                    foreach (var r in renderers) { r.lightProbeUsage = LightProbeUsage.Off; count++; }
+                    foreach (var r in renderers) { r.lightProbeUsage = LightProbeUsage.Off; }
                 }
             }
-            Plugin.Log.LogInfo($"BetterFGRoundPostmodifier: lightProbeUsage=Off on {count} renderers");
         }
 
         private static Transform FindEndgoals(Transform t)
@@ -348,7 +449,6 @@ namespace BetterFG.Features.UnityRound
                 Plugin.Log.LogWarning("BetterFGRoundPostmodifier: COMMON_ObjectiveReachEndZone not found, CCCC unavailable");
 
             var goals = new GameObject[endgoalsRoot.childCount];
-            int count = 0;
             for (int i = 0; i < endgoalsRoot.childCount; i++)
             {
                 var go = endgoalsRoot.GetChild(i).gameObject;
@@ -358,11 +458,9 @@ namespace BetterFG.Features.UnityRound
                 go.AddComponent<CustomEndzoneTrigger>();
                 go.AddComponent<COMMON_ObjectiveReachEndZone>();
                 goals[i] = go;
-                count++;
             }
 
             BetterFGUnityRounds.ActiveEndgoals = goals;
-            Plugin.Log.LogInfo($"BetterFGRoundPostmodifier: registered {count} endgoals (CCCC={BetterFGUnityRounds.CcccPosition})");
         }
     }
 }

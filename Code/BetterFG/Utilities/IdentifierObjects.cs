@@ -36,6 +36,98 @@ namespace BetterFG.Utilities
         Il2CppReferenceArray<NodeEntry> FilterRows(LevelEditorParameterMenuViewModel vm, LevelEditorPlaceableObject lepo);
     }
 
+    public sealed class MarkerKind
+    {
+        public string Owner;
+        public string Prefab;
+        public Vector3 Rotation;
+        public float Scale;
+        public bool ScaleYVaries;
+
+        public const float RotationTolerance = 0.5f;
+
+        public bool Matches(LevelEditorPlaceableObject lepo)
+        {
+            if (lepo == null || !lepo.name.StartsWith(Prefab, StringComparison.Ordinal)) return false;
+            if (ReadScale(lepo).x > Scale * 4f) return false;
+            return MatchesRotation(ReadRotation(lepo));
+        }
+
+        public bool MatchesRotation(Vector3 rotation) => Vector3.Distance(rotation, Rotation) < RotationTolerance;
+
+        public LevelEditorPlaceableObject Spawn(Vector3 pos, string hex, float scaleY = 0f)
+        {
+            var scale = new Vector3(Scale, scaleY > 0f ? scaleY : Scale, Scale);
+            var lepo = IdentifierObjects.Spawn(Prefab, pos, Rotation, scale, hex);
+            if (lepo == null)
+            {
+                Plugin.Log.LogWarning($"{Owner}: {Prefab} wouldn't spawn, that state will not survive a reload");
+                return null;
+            }
+            foreach (var r in lepo.GetComponentsInChildren<Renderer>(true))
+                if (r != null) r.forceRenderingOff = true;
+            return lepo;
+        }
+
+        private static Vector3 ReadRotation(LevelEditorPlaceableObject lepo)
+            => lepo.RotationData != null ? lepo.RotationData.CurrentRotation : lepo.transform.eulerAngles;
+
+        private static Vector3 ReadScale(LevelEditorPlaceableObject lepo)
+        {
+            var sp = lepo._levelEditorScaleParameter;
+            return sp != null ? sp.CurrentScale : lepo.transform.localScale;
+        }
+    }
+
+    public static class MarkerKinds
+    {
+        private const string Sphere = "Placeable_Block_Primitive_Sphere_Complete_Vanilla_MEDIUM";
+        private const string HalfSphere = "Placeable_Block_Primitive_Sphere_Half_Vanilla_MEDIUM";
+
+        public static readonly MarkerKind CustomLight = new MarkerKind
+        { Owner = "custom lights", Prefab = Sphere, Rotation = new Vector3(13.37f, 0f, 0f), Scale = 0.01f };
+
+        public static readonly MarkerKind RuleColour = new MarkerKind
+        { Owner = "rule colours", Prefab = Sphere, Rotation = new Vector3(0f, 13.37f, 0f), Scale = 0.01f };
+
+        public static readonly MarkerKind ObjectTheme = new MarkerKind
+        { Owner = "object themes", Prefab = Sphere, Rotation = new Vector3(0f, 0f, 13.37f), Scale = 0.01f, ScaleYVaries = true };
+
+        public static readonly MarkerKind SlimeColour = new MarkerKind
+        { Owner = "slime colour", Prefab = Sphere, Rotation = new Vector3(13.37f, 13.37f, 0f), Scale = 0.01f };
+
+        public static readonly MarkerKind Thruster = new MarkerKind
+        { Owner = "thrusters", Prefab = Sphere, Rotation = new Vector3(13.37f, 0f, 13.37f), Scale = 0.01f };
+
+        public static readonly MarkerKind UnityRoundCore = new MarkerKind
+        { Owner = "unity round core", Prefab = Sphere, Rotation = new Vector3(0f, 13.37f, 13.37f), Scale = 0.01f };
+
+        public static readonly MarkerKind UnityRoundAnchor = new MarkerKind
+        { Owner = "unity round anchors", Prefab = HalfSphere, Rotation = new Vector3(13.37f, 0f, 0f), Scale = 0.5f };
+
+        public static readonly MarkerKind[] All = { CustomLight, RuleColour, ObjectTheme, SlimeColour, Thruster, UnityRoundCore, UnityRoundAnchor };
+
+        static MarkerKinds()
+        {
+            for (int i = 0; i < All.Length; i++)
+                for (int j = i + 1; j < All.Length; j++)
+                {
+                    if (All[i].Prefab != All[j].Prefab) continue;
+                    float gap = Vector3.Distance(All[i].Rotation, All[j].Rotation);
+                    if (gap >= MarkerKind.RotationTolerance * 2f) continue;
+                    Plugin.Log.LogError($"marker clash: {All[i].Owner} and {All[j].Owner} both sit at {All[i].Rotation} " +
+                        $"on {All[i].Prefab}, only {gap:0.##} apart. One will steal the other's markers, move one of them.");
+                }
+        }
+
+        public static MarkerKind Of(LevelEditorPlaceableObject lepo)
+        {
+            foreach (var kind in All)
+                if (kind.Matches(lepo)) return kind;
+            return null;
+        }
+    }
+
     public static class IdentifierObjectRegistry
     {
         private const int KeepButtonCount = 5;
@@ -46,7 +138,11 @@ namespace BetterFG.Utilities
         private static IIdentifierObject _liveMatch;
         private static LevelEditorPlaceableObject _liveTarget;
 
-        public static void Register(IIdentifierObject obj) => _all.Add(obj);
+        public static void Register(IIdentifierObject obj)
+        {
+            if (FeatureAvailability.Off(obj.GetType().Name)) return;
+            _all.Add(obj);
+        }
 
         public static IIdentifierObject Find(LevelEditorPlaceableObject lepo)
         {
@@ -188,6 +284,26 @@ namespace BetterFG.Utilities
     {
         private static readonly Dictionary<string, Il2CppSystem.Guid> _variantByName = new Dictionary<string, Il2CppSystem.Guid>();
 
+        public static Vector3 ReticleOrigin(LevelEditorManager mgr)
+        {
+            var reticleBase = mgr.GetReticleBase();
+            var origin = reticleBase != null ? reticleBase.ReticlePosition : Vector3.zero;
+            if (origin != Vector3.zero) return origin;
+
+            var cam = mgr.Camera;
+            if (cam != null)
+            {
+                origin = cam.GetLastReticlePosition();
+                if (origin != Vector3.zero) return origin;
+
+                var reticleGo = cam.ReticleGameObject;
+                if (reticleGo != null) return reticleGo.transform.position;
+            }
+
+            var main = Camera.main;
+            return main != null ? main.transform.position + main.transform.forward * 12f : Vector3.zero;
+        }
+
         public static bool InEditor()
         {
             try { return GlobalGameStateClient.Instance != null && GlobalGameStateClient.Instance.IsInCreativeEditor; }
@@ -228,24 +344,31 @@ namespace BetterFG.Utilities
             return null;
         }
 
-        public static Il2CppSystem.Guid? VariantGuid(string prefabName)
+        public static PlaceableObjectData PodByPrefab(string prefabName)
         {
-            if (_variantByName.TryGetValue(prefabName, out var cached)) return cached;
-
             var pods = LevelEditorObjectList.CurrentObjects?.Cast<Il2CppSystem.Collections.Generic.List<PlaceableObjectData>>();
             if (pods == null) return null;
 
             foreach (var pod in pods)
             {
                 if (pod == null || pod.DefaultVariant == null || pod.DefaultVariant.Prefab == null) continue;
-                if (pod.DefaultVariant.Prefab.name != prefabName) continue;
-                _variantByName[prefabName] = pod.DefaultVariant.Guid;
-                return pod.DefaultVariant.Guid;
+                if (pod.DefaultVariant.Prefab.name == prefabName) return pod;
             }
             return null;
         }
 
-        public static LevelEditorPlaceableObject Spawn(string prefabName, Vector3 pos, Vector3 rot, Vector3 scale, string hex, bool selectAtReticle = false)
+        public static Il2CppSystem.Guid? VariantGuid(string prefabName)
+        {
+            if (_variantByName.TryGetValue(prefabName, out var cached)) return cached;
+
+            var pod = PodByPrefab(prefabName);
+            if (pod == null) return null;
+
+            _variantByName[prefabName] = pod.DefaultVariant.Guid;
+            return pod.DefaultVariant.Guid;
+        }
+
+        public static LevelEditorPlaceableObject Spawn(string prefabName, Vector3 pos, Vector3 rot, Vector3 scale, string hex, bool selectAtReticle = false, bool hide = true)
         {
             var mgr = LevelEditorManager.Instance;
             var variant = VariantGuid(prefabName);
@@ -272,7 +395,7 @@ namespace BetterFG.Utilities
             var lepo = go != null ? go.GetComponent<LevelEditorPlaceableObject>() : null;
             if (lepo == null) return null;
 
-            BatchTargets.HideAndDecollide(lepo);
+            if (hide) BatchTargets.HideAndDecollide(lepo);
 
             if (selectAtReticle)
             {

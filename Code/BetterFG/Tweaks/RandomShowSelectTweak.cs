@@ -26,6 +26,8 @@ namespace BetterFG.Tweaks
         PrivateLobbyShowListViewModel _screenVm;
         NavigationPromptData _data;
         bool _injected;
+        int _rowsSeen = -1;
+        bool _hasShow;
         readonly List<PrivateLobbyShowListEntryViewModel> _liveScratch = new List<PrivateLobbyShowListEntryViewModel>();
 
         // PrivateLobbyShowListViewModel.Awake, off the same patch LobbyShowSearchTweak uses.
@@ -35,6 +37,7 @@ namespace BetterFG.Tweaks
             if (inst == null || !inst.IsEnabled || vm == null) return;
             inst._screenVm = vm;
             inst._content = vm.transform.Find(LobbyShowSearchTweak.ContentPath);
+            inst._rowsSeen = -1;
         }
 
         public static void OnShowListClosed()
@@ -69,15 +72,27 @@ namespace BetterFG.Tweaks
 
         bool HasAnyShow()
         {
-            if (_content == null || _screenVm == null || !_screenVm.gameObject.activeInHierarchy) return false;
+            if (_content == null || _screenVm == null || !_screenVm.gameObject.activeInHierarchy)
+            {
+                _rowsSeen = -1;
+                return false;
+            }
+
             int n = _content.childCount;
+            if (n == _rowsSeen) return _hasShow;
+            _rowsSeen = n;
+            _hasShow = false;
+
             for (int i = 0; i < n; i++)
             {
                 var c = _content.GetChild(i);
                 if (c.gameObject.activeInHierarchy && c.GetComponent<PrivateLobbyShowListEntryViewModel>() != null)
-                    return true;
+                {
+                    _hasShow = true;
+                    break;
+                }
             }
-            return false;
+            return _hasShow;
         }
 
         void Trigger()

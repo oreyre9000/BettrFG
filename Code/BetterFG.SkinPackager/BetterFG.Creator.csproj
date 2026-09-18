@@ -68,14 +68,16 @@
     <Compile Include="Shared\AssetBundleBuilder.cs" />
     <Compile Include="Shared\CatalogBat.cs" />
     <Compile Include="Shared\CoverImage.cs" />
-    <Compile Include="Skins\SkinPackagerWindow.cs" />
-    <Compile Include="Skins\SkinPackagerBuild.cs" Condition="Exists('$(MSBuildProjectDirectory)\Skins\SkinPackagerBuild.cs')" />
+    <Compile Include="Hub\CreatorHubWindow.cs" />
+    <Compile Include="Hub\CreatorHubBrowse.cs" />
+    <Compile Include="Hub\CreatorHubRounds.cs" />
+    <Compile Include="Hub\CreatorHubBuild.cs" />
     <Compile Include="Skins\SkinPreview.cs" Condition="Exists('$(MSBuildProjectDirectory)\Skins\SkinPreview.cs')" />
     <Compile Include="Skins\SkinInfoJson.cs" />
     <Compile Include="Skins\GroupSkinsWindow.cs" />
     <Compile Include="Emotes\EmotePackagerWindow.cs" />
+    <Compile Include="Maps\MapCreate.cs" />
     <Compile Include="Maps\MapCreatorWindow.cs" />
-    <Compile Include="Maps\MapPackagerWindow.cs" />
     <Compile Include="Maps\MapInfoJson.cs" />
     <Compile Include="Maps\BetterFGMapAsset.cs" />
     <Compile Include="Maps\BetterFGMapAssetEditor.cs" />

@@ -1,5 +1,6 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using BetterFG.Features.AllCosmetics;
+using BetterFG.Features.CreativeExpansion;
 using BetterFG.Features.CustomizeFallGuys;
 using BetterFG.Features.MorePlatformIcon;
 using BetterFG.Features.QualificationTime;
@@ -19,8 +20,11 @@ namespace BetterFG.Features
             FeatureTimePlacement.feature,
             FeatureReplay.feature,
             FeatureCustomizeFallGuys.feature,
+            FeatureCreativeExpansion.feature,
             //FeatureAllCosmetics.feature
         };
+
+        static FeatureRegistry() => _all.RemoveAll(f => Utilities.FeatureAvailability.Off(f.id));
 
         public static IReadOnlyList<BfgFeature> all => _all;
 

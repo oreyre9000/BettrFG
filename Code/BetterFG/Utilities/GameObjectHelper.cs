@@ -1,8 +1,20 @@
+using Il2CppInterop.Runtime;
 using UnityEngine;
 namespace BetterFG.Utilities
 {
     public static class GameObjectHelper
     {
+        public static void RelabelGameLabel(Transform root, string path, string idOrText)
+        {
+            var t = root.Find(path);
+            if (t == null) return;
+            var loc = t.gameObject.GetComponent("LocalisedStaticLabel")?.TryCast<Behaviour>();
+            if (loc != null) loc.enabled = false;
+            var bind = t.gameObject.GetComponent("TMPTextBinding")?.TryCast<Behaviour>();
+            if (bind != null) bind.enabled = false;
+            BettrFG.uGUI.UGUIShip.RelabelText(t.GetComponent<TMPro.TextMeshProUGUI>(), idOrText);
+        }
+
         public static bool IsLobbyCharacter(GameObject bean)
         {
             if (bean == null) return false;

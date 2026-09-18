@@ -504,8 +504,6 @@ namespace BetterFG.Features.Assets
             catch { return null; }
         }
 
-        private static string _python;
-
         // the prefab route hands the whole job to the sidecar: it reads the real serialized objects
         // out of the bundles and writes Unity YAML, so nothing has to be rebuilt by hand in-editor
         public static System.Diagnostics.Process StartPrefabExport(string dir, string key, out string error) =>
@@ -528,7 +526,7 @@ namespace BetterFG.Features.Assets
                 File.WriteAllText(Path.Combine(scratch, module), src);
             }
 
-            string python = FindPython();
+            string python = PythonRuntime.Find();
             if (python == null) { error = LocalizationService.Get("asset_export.no_python"); return null; }
 
             string bundles = Path.Combine(Application.dataPath, "StreamingAssets", "aa", "StandaloneWindows64");
@@ -541,54 +539,13 @@ namespace BetterFG.Features.Assets
                 Arguments = args,
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                RedirectStandardError = true,
             };
             psi.EnvironmentVariables["BETTRFG_PROGRESS"] = Path.Combine(scratch, "progress.txt");
-            return System.Diagnostics.Process.Start(psi);
-        }
-
-        private static string FindPython()
-        {
-            if (_python != null) return _python.Length == 0 ? null : _python;
-
-            var candidates = new List<string>();
-            if (File.Exists(PythonRuntime.Exe)) candidates.Add(PythonRuntime.Exe);
-            string progs = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python");
-            if (Directory.Exists(progs))
-            {
-                var dirs = Directory.GetDirectories(progs, "Python3*");
-                Array.Sort(dirs);
-                Array.Reverse(dirs);
-                foreach (var d in dirs) candidates.Add(Path.Combine(d, "python.exe"));
-            }
-            candidates.Add("python");
-
-            foreach (var c in candidates)
-            {
-                try
-                {
-                    var probe = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = c,
-                        Arguments = "-c \"import UnityPy\"",
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardError = true,
-                    });
-                    probe.StandardError.ReadToEnd();
-                    probe.WaitForExit(20000);
-                    if (!probe.HasExited || probe.ExitCode != 0) continue;
-                }
-                catch { continue; }
-
-                _python = c;
-                Plugin.Log.LogInfo("bundle reader will run on " + c);
-                return c;
-            }
-
-            Plugin.Log.LogWarning("no python with UnityPy on this machine, geometry can't be pulled");
-            _python = "";
-            return null;
+            var proc = System.Diagnostics.Process.Start(psi);
+            proc.ErrorDataReceived += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) Plugin.Log.LogWarning(modules[0] + ": " + e.Data); };
+            proc.BeginErrorReadLine();
+            return proc;
         }
 
         public static string Build(GameObject root, string dir, string name, out string status)

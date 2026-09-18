@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using BepInEx.Unity.IL2CPP.Utils.Collections;
+using BetterFG.Services;
 using BettrFG.uGUI;
 using UnityEngine;
 
@@ -14,9 +16,14 @@ namespace BetterFG.Features.Onboarding
         protected Canvas _blockerCanvas;
         protected OnboardingBlocker _blocker;
         protected GameObject _popup;
+        private readonly List<Canvas> _hidden = new List<Canvas>();
 
-        protected void CreateSurfaces(string name, int canvasOrder, int blockerOrder)
+        protected void CreateSurfaces(string name, int canvasOrder, int blockerOrder, bool hideRest = false)
         {
+            if (hideRest)
+                foreach (var c in UIScaleService.All)
+                    if (c != null && c.enabled && !c.name.EndsWith("Backdrop")) { c.enabled = false; _hidden.Add(c); }
+
             _blockerCanvas = UGUIShip.CreateCanvas("BetterFG_" + name + "Blocker");
             _blockerCanvas.sortingOrder = blockerOrder;
             _blocker = new OnboardingBlocker(_blockerCanvas);
@@ -76,6 +83,8 @@ namespace BetterFG.Features.Onboarding
             }
             if (_canvas != null) UnityEngine.Object.Destroy(_canvas.gameObject);
             if (_blockerCanvas != null) UnityEngine.Object.Destroy(_blockerCanvas.gameObject);
+            foreach (var c in _hidden) if (c != null) c.enabled = true;
+            _hidden.Clear();
         }
     }
 }

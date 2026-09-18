@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -465,6 +465,10 @@ namespace BetterFG.Customization.Player
                 Plugin.Log.LogWarning($"unknown type for {skinInfo.name}");
                 return;
             }
+
+            if (type == SkinType.Costume)
+                foreach (var s in new List<ActiveSkinSlot>(activeSlots))
+                    if (s?.skinInfo != null && s.type == SkinType.Costume) RemoveSlotByFile(s.skinInfo.file);
 
             bundle = GetOrRegisterBundle(skinInfo.file, bundle);
             redownloadingFiles.Remove(skinInfo.file);

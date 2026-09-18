@@ -54,13 +54,14 @@
 	<Target Name="GenerateBuildHash" BeforeTargets="BeforeCompile;CoreCompile">
 	  <PropertyGroup>
 	    <BuildHashFile>$(IntermediateOutputPath)BuildHash.g.cs</BuildHashFile>
+	    <BettrFGVersionLabel Condition="'$(BettrFGVersionLabel)' == ''">$(BettrFGVersion)</BettrFGVersionLabel>
 	  </PropertyGroup>
 	  <MakeDir Directories="$(IntermediateOutputPath)" />
 	  <ComputeBettrFGSourceHash ProjectDir="$(MSBuildProjectDirectory)\" ExtraDir="$(MSBuildProjectDirectory)\..\BetterFG.uGUI\">
 	    <Output TaskParameter="HashValue" PropertyName="BuildHashValue" />
 	  </ComputeBettrFGSourceHash>
 	  <ItemGroup>
-	    <_BuildHashContent Include="namespace BetterFG.Core { public static partial class BetterFGInfo { public const string BuildHash = &quot;$(BuildHashValue)&quot;%3B } }" />
+	    <_BuildHashContent Include="namespace BetterFG.Core { public static partial class BetterFGInfo { public const string BuildHash = &quot;$(BuildHashValue)&quot;%3B public const string VersionLabel = &quot;$(BettrFGVersionLabel)&quot;%3B } }" />
 	  </ItemGroup>
 	  <WriteLinesToFile File="$(BuildHashFile)" Lines="@(_BuildHashContent)" Overwrite="true" WriteOnlyWhenDifferent="false" />
 	  <ItemGroup>
@@ -99,6 +100,7 @@
 	    <CopyBuildsToDownloads Condition="$(BettrFGPromptOut.Contains('DL=0'))">false</CopyBuildsToDownloads>
 	    <BettrFGDownloadsFlag Condition="$(BettrFGPromptOut.Contains('DL=1'))">-CopyBuildsToDownloads</BettrFGDownloadsFlag>
 	    <BettrFGDownloadsFlag Condition="$(BettrFGPromptOut.Contains('DL=0'))"></BettrFGDownloadsFlag>
+	    <BettrFGVersionLabel Condition="$(BettrFGPromptOut.Contains('VER='))">$([System.Text.RegularExpressions.Regex]::Match($(BettrFGPromptOut), 'VER=([^%3B]*)').Groups[1].Value)</BettrFGVersionLabel>
 	    <KillAndRestartGame Condition="$(BettrFGPromptOut.Contains('KILL=0'))">false</KillAndRestartGame>
 	    <SkipLaunch Condition="$(BettrFGPromptOut.Contains('KILL=0'))">true</SkipLaunch>
 	    <!-- early access drives IsPublicRelease, which is what puts the "not for public release" +
@@ -366,9 +368,6 @@
     </Reference>
     <Reference Include="FallGuys.Store.Protocol.Client">
       <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Fall Guys\BepinEx\interop\FallGuys.Store.Protocol.Client.dll</HintPath>
-    </Reference>
-    <Reference Include="FallGuysLib">
-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Fall Guys\BepinEx\plugins\BetterFG\FallGuysLib.dll</HintPath>
     </Reference>
     <Reference Include="FMODUnity">
       <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Fall Guys\BepinEx\interop\FMODUnity.dll</HintPath>

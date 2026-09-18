@@ -43,6 +43,7 @@ namespace BetterFG.Features.QualificationTime
         {
             new FeatureSetting { id = "store", label = "ui.store_pbs", defaultOn = true },
             new FeatureSetting { id = "qual", label = "ui.show_pb_on_qual", defaultOn = true },
+            new FeatureSetting { id = "banner", label = "pb.use_qual_banner", defaultOn = true },
             new FeatureSetting { id = "loadscreen", label = "ui.show_pb_on_load_screen", defaultOn = true },
             new FeatureSetting { id = "play", label = "ui.show_pb_during_play", defaultOn = true },
             new FeatureSetting { id = "timer", label = "ui.show_live_timer", defaultOn = true },
@@ -195,9 +196,10 @@ namespace BetterFG.Features.QualificationTime
             if (gsv != null)
                 gsv.GetLiveClientGameManager(out cgm);
 
-            GameObject clone = On("qual") ? SpawnQualPopup(elapsed, cgm) : null;
+            bool useBanner = On("qual") && On("banner") && cgm != null && LevelEditorManager.Instance == null;
+            GameObject clone = !On("qual") ? null : useBanner ? SpawnPromptHost() : SpawnQualPopup(elapsed, cgm);
             _qualPopupGo = clone;
-            if (clone == null) DestroyLiveTimer();
+            if (clone == null || useBanner) DestroyLiveTimer();
 
             string cgmRoundId = null;
             string cgmRoundName = null;
@@ -259,9 +261,17 @@ namespace BetterFG.Features.QualificationTime
                     Plugin.Log.LogWarning("QualTime: round has no display name, not saving a PB keyed by id");
                 if (canStorePb && isUnityRound) SplashCache.TryRename(roundId, roundCacheId);
                 Plugin.Log.LogInfo("QualTime: isPb=" + isPb);
+                if (useBanner)
+                {
+                    _bannerElapsed = elapsed;
+                    _bannerIsPb = isPb;
+                    _bannerReady = true;
+                    if (isPb) AudioService.PlayPB();
+                    if (_openBanner != null) DressQualBanner(_openBanner);
+                }
                 if (canStorePb && clone != null)
                 {
-                    ShowPbLabel(clone.transform, isPb, roundName, elapsed, prevPb);
+                    if (!useBanner) ShowPbLabel(clone.transform, isPb, roundName, elapsed, prevPb);
                     BetterFGUIMan.Instance.StartCoroutine(WaitForFeatureInput(clone, roundCacheId, roundName, isPb, elapsed, PBStore.CurrentType(), isRealUgc).WrapToIl2Cpp());
                 }
             }
@@ -373,6 +383,21 @@ namespace BetterFG.Features.QualificationTime
             return clone;
         }
 
+        static GameObject SpawnPromptHost()
+        {
+            var gameStates = GameObject.Find("UICanvas_Client_V2(Clone)/Default/InGameUiManager(Clone)/GameStates");
+            if (gameStates == null) return null;
+            var host = new GameObject("Thisisacustomname");
+            var rt = host.AddComponent<RectTransform>();
+            rt.SetParent(gameStates.transform, false);
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = Vector2.zero;
+            BetterFGUIMan.Instance.StartCoroutine(AdjustQualTimerPositionAfterFrame(rt).WrapToIl2Cpp());
+            return host;
+        }
+
         static IEnumerator WaitForFeatureInput(GameObject clone, string roundId, string roundName, bool isPb, float elapsed, PbType type, bool isUgc)
         {
             // Favorite prompt (Report glyph) always shows so you can toggle favorite on this PB
@@ -409,6 +434,7 @@ namespace BetterFG.Features.QualificationTime
             {
                 var savePrompt = NavPromptCore.From(NavPromptCore.Favourite)
                     .WithLabel("Save PB", "bfg_savepb_label")
+                    .Bind(BfgBinds.PbSave)
                     .AnchoredAt(NavPromptAnchor.Custom)
                     .SpawnOn(rowGo.transform);
                 while (clone != null)
@@ -446,6 +472,7 @@ namespace BetterFG.Features.QualificationTime
             {
                 setPbPrompt = NavPromptCore.From(NavPromptCore.Favourite)
                     .WithLabel("Set as PB", "bfg_setaspb_label")
+                    .Bind(BfgBinds.PbOverride)
                     .AnchoredAt(NavPromptAnchor.Custom)
                     .SpawnOn(rowGo.transform);
             }
@@ -492,8 +519,8 @@ namespace BetterFG.Features.QualificationTime
             bool fav = PBStore.IsFeatured(roundId, roundName);
             return NavPromptCore.From(NavPrompt.PlayEmote)
                 .WithLabel(fav ? "Unfavorite PB" : "Favorite PB", fav ? "bfg_unfavpb_label" : "bfg_favpb_label")
+                .Bind(BfgBinds.PbFavorite)
                 .AnchoredAt(NavPromptAnchor.Custom)
-                .PollActions(RewiredConsts.Action.Menu_EmoteMenu1)
                 .SpawnOn(parent);
         }
 
@@ -719,6 +746,55 @@ namespace BetterFG.Features.QualificationTime
 
         static GameObject _qualPopupGo;
         public static bool QualPopupOpen => _qualPopupGo != null;
+
+        static float _bannerElapsed;
+        static bool _bannerIsPb;
+        static bool _bannerReady;
+        static Component _openBanner;
+
+        public static void OnBannerOpened(Component banner)
+        {
+            foreach (var t in banner.GetComponentsInChildren<Transform>(true))
+                if (t.name == "BettrFG_QualBannerPb") UnityEngine.Object.Destroy(t.gameObject);
+            if (!feature.enabled || !On("qual") || !On("banner")) return;
+            var qual = banner.TryCast<FGClient.UI.QualifiedScreenViewModel>();
+            var win = banner.TryCast<FGClient.UI.WinnerScreenViewModel>();
+            if (qual == null && win == null) return;
+            string title = qual != null ? qual.TitleId : win.TitleId;
+            if (title != "qualified" && title != "winner") return;
+            _openBanner = banner;
+            if (_bannerReady) DressQualBanner(banner);
+        }
+
+        static void DressQualBanner(Component banner)
+        {
+            var qual = banner.TryCast<FGClient.UI.QualifiedScreenViewModel>();
+            var win = banner.TryCast<FGClient.UI.WinnerScreenViewModel>();
+            TimeSpan t = TimeSpan.FromSeconds(_bannerElapsed);
+            string timeKey = "bfg_qual_banner_time";
+            CMSLoader.Instance._localisedStrings._localisedStrings[timeKey] = string.Format("{0:D2}:{1:D2}:{2:D3}", t.Minutes, t.Seconds, t.Milliseconds);
+            if (qual != null) qual.TitleId = timeKey; else win.TitleId = timeKey;
+            Plugin.Log.LogInfo($"qual banner title -> {_bannerElapsed:F3}s{(_bannerIsPb ? ", personal best" : "")}");
+            if (!_bannerIsPb) return;
+            foreach (var b in banner.GetComponentsInChildren<Mediatonic.Tools.MVVM.PropertyBinding>(true))
+            {
+                if (b._sourcePropertyName != "TitleId" || b.GetComponent<TextMeshProUGUI>() == null) continue;
+                var titleRt = b.GetComponent<RectTransform>();
+                var pbGo = UnityEngine.Object.Instantiate(b.gameObject, titleRt.parent);
+                pbGo.name = "BettrFG_QualBannerPb";
+                foreach (var cb in pbGo.GetComponents<Mediatonic.Tools.MVVM.PropertyBinding>())
+                    UnityEngine.Object.Destroy(cb);
+                var pbRt = pbGo.GetComponent<RectTransform>();
+                var tmp = pbGo.GetComponent<TextMeshProUGUI>();
+                pbRt.anchoredPosition = titleRt.anchoredPosition + new Vector2(0f, -tmp.fontSize * 0.85f);
+                pbRt.localScale = titleRt.localScale * 0.45f;
+                UGUIShip.RelabelText(tmp, "pb.banner_personal_best");
+                tmp.color = new Color(1f, 1f, 0.3f);
+                pbGo.SetActive(true);
+                Plugin.Log.LogInfo("personal best line hung under " + b.name);
+                break;
+            }
+        }
 
         static bool? _isTimeAttackCache;
         static TimeAttackPlayerStats _taLocalStats;
@@ -2134,6 +2210,8 @@ namespace BetterFG.Features.QualificationTime
             ResetRaceRoundCache();
             _elapsedBaseline = 0f;
             _qualHandled = false;
+            _bannerReady = false;
+            _openBanner = null;
             _ghostRecording = false;
             _ghostFrames = null;
             foreach (var g in _ghostGos) if (g != null) UnityEngine.Object.Destroy(g);
