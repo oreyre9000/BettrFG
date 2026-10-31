@@ -473,6 +473,23 @@ namespace BetterFG.Patches.GameStates
         public static void Postfix()
         {
             BetterFGUnityRounds.MarkSceneReadyAndInstantiateQueuedRound();
+
+            var host = BeanMonitorService.Instance;
+            if (host != null) host.StartCoroutine(HideZoneFlags().WrapToIl2Cpp());
+            else HideZoneFlagsNow();
+        }
+
+        private static IEnumerator HideZoneFlags()
+        {
+            yield return null;
+            HideZoneFlagsNow();
+        }
+
+        private static void HideZoneFlagsNow()
+        {
+            if (GlobalGameStateClient.Instance?.IsInCreativeEditor == true) return;
+            foreach (var checker in UnityEngine.Object.FindObjectsOfType<LevelEditorCheckpointTriggerZoneChecker>())
+                checker.ShowVisual(false);
         }
     }
 
