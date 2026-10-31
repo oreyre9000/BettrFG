@@ -36,7 +36,7 @@ namespace BetterFG.Services
 
         public const string DEFAULT_GITHUB_URL = "https://github.com/oreyre9000/BetterFGPublicSkins";
         public const string FEATURED_JSON_URL = "https://raw.githubusercontent.com/oreyre9000/BettrFG/main/featured.json";
-        public const long MAX_BUNDLE_BYTES = 4_048_576; // temu 4 MB
+        public const long MAX_BUNDLE_BYTES = 7 * 1024 * 1024;
 
         private const string SETTINGS_KEY = "repos.list";
         private readonly Dictionary<string, Texture2D> _coverCache = new Dictionary<string, Texture2D>();
@@ -268,7 +268,7 @@ namespace BetterFG.Services
 
             if (!string.IsNullOrEmpty(cl) && long.TryParse(cl, out long size) && size > MAX_BUNDLE_BYTES)
             {
-                callback(false, $"Bundle too large ({size / 1024}KB > 1MB), skipping");
+                callback(false, $"Bundle too large ({size / 1024}KB > {MAX_BUNDLE_BYTES / 1024}KB), skipping");
                 yield break;
             }
 

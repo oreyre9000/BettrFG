@@ -226,7 +226,7 @@ namespace BetterFG.UI
             {
                 foreach (char c in titles[i] + "|" + images[i] + "\n") h = (h ^ c) * 16777619;
                 foreach (var p in pages[i])
-                    foreach (char c in p.image + "|" + p.title + "|" + p.text + "\n") h = (h ^ c) * 16777619;
+                    foreach (char c in p.image + "|" + p.title + "|" + p.text + "|" + p.link + "\n") h = (h ^ c) * 16777619;
             }
             return h.ToString("x8");
         }
@@ -347,12 +347,14 @@ namespace BetterFG.UI
             var titles = new List<string>();
             var images = new List<string>();
             var pages = new List<List<NewsViewer.Page>>();
+            var dates = new List<string>();
             foreach (var entry in JsonUtil.GetRootArray(json))
             {
                 string t = JsonUtil.GetValue(entry, "title");
                 if (t.Length == 0) continue;
                 titles.Add(t);
                 images.Add(JsonUtil.GetValue(entry, "image"));
+                dates.Add(JsonUtil.GetValue(entry, "date"));
                 var list = new List<NewsViewer.Page>();
                 foreach (var p in JsonUtil.GetArray(entry, "pages"))
                     list.Add(new NewsViewer.Page
@@ -360,12 +362,14 @@ namespace BetterFG.UI
                         image = JsonUtil.GetValue(p, "image"),
                         title = JsonUtil.GetValue(p, "title"),
                         text = JsonUtil.GetValue(p, "text"),
+                        link = JsonUtil.GetValue(p, "link"),
                     });
                 pages.Add(list);
             }
 
             string hash = HashOf(titles, images, pages);
             if (hash == _hash) yield break;
+            bool firstLoad = _hash.Length == 0;
             _hash = hash;
 
             foreach (var old in _texCache.Values) if (old != null) UnityEngine.Object.Destroy(old);
@@ -377,12 +381,16 @@ namespace BetterFG.UI
             _pages.Clear();
             _pages.AddRange(pages);
             Plugin.Log.LogInfo($"news feed: {_titles.Count} stories");
-            if (_index >= _titles.Count) _index = 0;
-
             var keys = new List<string>();
             for (int i = 0; i < titles.Count; i++) keys.Add(ItemKey(titles[i], images[i]));
             var seen = new HashSet<string>(SettingsService.Get(KEY_SEEN, "").Split(','));
-            int fresh = keys.FindIndex(k => !seen.Contains(k));
+            int newest = 0, fresh = -1;
+            for (int i = 0; i < dates.Count; i++)
+            {
+                if (string.CompareOrdinal(dates[i], dates[newest]) > 0) newest = i;
+                if (!seen.Contains(keys[i]) && (fresh < 0 || string.CompareOrdinal(dates[i], dates[fresh]) > 0)) fresh = i;
+            }
+            if (firstLoad || _index >= _titles.Count) _index = newest;
             SettingsService.Set(KEY_SEEN, string.Join(",", keys));
 
             if (fresh >= 0 && Enabled)

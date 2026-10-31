@@ -13,19 +13,20 @@ namespace BetterFG.UI
     {
         internal struct Page
         {
-            public string image, title, text;
+            public string image, title, text, link;
         }
 
         private const float BAR_H = 150f;
         private const float BTN = 64f;
         private const float EDGE = 28f;
+        private const float LINK_W = 200f;
 
         private static Canvas _canvas;
         private static RawImage _img, _blur;
         private static AspectRatioFitter _fit, _blurFit;
         private static readonly Dictionary<string, RenderTexture> _blurs = new Dictionary<string, RenderTexture>();
         private static Text _title, _text, _count;
-        private static GameObject _prev, _next, _captionBar;
+        private static GameObject _prev, _next, _captionBar, _link;
         private static readonly List<Page> _pages = new List<Page>();
         private static int _i;
         private static bool _busy;
@@ -130,6 +131,17 @@ namespace BetterFG.UI
             if (IsOpen) ShowPage();
         }
 
+        private static bool SafeLink(string url)
+            => Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps;
+
+        private static void OpenLink()
+        {
+            string url = _pages[_i].link;
+            if (!SafeLink(url)) return;
+            Plugin.Log.LogInfo($"news link clicked, off to {url}");
+            Application.OpenURL(url);
+        }
+
         private static void Step(int d)
         {
             if (_pages.Count < 2 || _slideDir != 0) return;
@@ -181,6 +193,14 @@ namespace BetterFG.UI
             crt.pivot = new Vector2(1f, 1f);
             crt.anchoredPosition = new Vector2(-EDGE * 3f, -20f);
             crt.sizeDelta = new Vector2(160f, 40f);
+
+            var link = UGUIShip.CreateButton(barRt, new Rect(0f, 0f, LINK_W, 44f), "Open link",
+                new Color(0.35f, 0.55f, 0.9f, 1f), Color.white, 20, OpenLink);
+            var lrt = link.GetComponent<RectTransform>();
+            lrt.anchorMin = lrt.anchorMax = lrt.pivot = new Vector2(1f, 0f);
+            lrt.anchoredPosition = new Vector2(-EDGE * 3f, 20f);
+            lrt.sizeDelta = new Vector2(LINK_W, 44f);
+            _link = link.gameObject;
 
             Corner(root, "✕", new Vector2(1f, 1f), new Vector2(-EDGE, -EDGE), new Color(0.6f, 0.18f, 0.18f, 1f), Close);
             _prev = Corner(root, "<", new Vector2(0f, 0.5f), new Vector2(EDGE, 0f), new Color(0.35f, 0.55f, 0.9f, 1f), () => Step(-1));
@@ -255,7 +275,11 @@ namespace BetterFG.UI
 
             _title.text = p.title ?? "";
             _text.text = p.text ?? "";
-            _captionBar.SetActive(!string.IsNullOrEmpty(p.title) || !string.IsNullOrEmpty(p.text) || _pages.Count > 1);
+            bool link = SafeLink(p.link);
+            _link.SetActive(link);
+            var trt = _text.rectTransform;
+            trt.offsetMax = new Vector2(link ? -EDGE * 4f - LINK_W : -EDGE * 3f, trt.offsetMax.y);
+            _captionBar.SetActive(!string.IsNullOrEmpty(p.title) || !string.IsNullOrEmpty(p.text) || _pages.Count > 1 || link);
             _count.text = _pages.Count > 1 ? $"{_i + 1} / {_pages.Count}" : "";
             _prev.SetActive(_pages.Count > 1);
             _next.SetActive(_pages.Count > 1);

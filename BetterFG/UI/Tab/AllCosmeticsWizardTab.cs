@@ -1,13 +1,10 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using BepInEx.Unity.IL2CPP.Utils.Collections;
 using BetterFG.Customization.Player;
 using FG.Common.CMS;
 using Il2CppInterop.Runtime;
 using UnityEngine;
 using UnityEngine.UI;
-using LayoutElement = UnityEngine.UI.LayoutElement;
 
 namespace BetterFG.UI.Tab
 {
@@ -17,11 +14,17 @@ namespace BetterFG.UI.Tab
 
         public override string TabTitle => "All Cosmetics - Add";
         protected override string BgResource => "BetterFG.assets.ui.tab.allcosm.png";
+        public override float OpenHeight => UIScale.TAB_CONTENT_H * 1.15f;
 
         protected override string[] StepTitles => _category == Category.Emote
             ? new[] { "Choose a cosmetic to add", "Pick a wheel slot" }
             : new[] { "Choose a cosmetic to add" };
         protected override int PanelCount => 2;
+
+        private static readonly Color TILE_FILL = new Color(0.04f, 0.04f, 0.04f, 1f);
+        private const int GridCols = 5;
+        private const float TileGap = 5f;
+        private const int MaxTiles = 150;
 
         private enum Category { Costume, Colour, Pattern, Faceplate, Emote }
         private static readonly string[] CATEGORY_LABELS = { "Costumes", "Colours", "Patterns", "Faces", "Emotes" };
@@ -32,9 +35,13 @@ namespace BetterFG.UI.Tab
         private Category _category = Category.Costume;
         private Text _categoryLbl;
 
-        private InputField _searchField;
+        private string _filter = "";
+        private float _tile;
         private RectTransform _resultContent;
+        private readonly List<UnityEngine.Object> _all = new List<UnityEngine.Object>();
+        private readonly List<string> _allNames = new List<string>();
         private readonly List<UnityEngine.Object> _results = new List<UnityEngine.Object>();
+        private readonly List<Button> _tiles = new List<Button>();
         private readonly HashSet<string> _selectedCostumeIds = new HashSet<string>();
         private string _selectedSingleId = "";
 
@@ -77,58 +84,48 @@ namespace BetterFG.UI.Tab
 
         private void BuildPickStep(RectTransform root, float w, float bodyH)
         {
-            float cy = SH;
-
             float arrow = BTN_H;
-            UGUIShip.CreateButton(root.transform, new Rect(PAD, cy, arrow, BTN_H), "<", BTN_DARK, WHITE, FS_SM, new Action(() => StepCategory(-1)));
-            _categoryLbl = UGUIShip.CreateLabel(root.transform, new Rect(PAD + arrow, cy, w - arrow * 2f, BTN_H),
+            UGUIShip.CreateButton(root.transform, new Rect(PAD, 0f, arrow, BTN_H), "<", BTN_DARK, WHITE, FS_SM, new Action(() => StepCategory(-1)));
+            _categoryLbl = UGUIShip.CreateLabel(root.transform, new Rect(PAD + arrow, 0f, w - arrow * 2f, BTN_H),
                 CATEGORY_LABELS[(int)_category], FS_SM, WHITE, TextAnchor.MiddleCenter);
-            UGUIShip.CreateButton(root.transform, new Rect(PAD + w - arrow, cy, arrow, BTN_H), ">", BTN_DARK, WHITE, FS_SM, new Action(() => StepCategory(1)));
-            cy += BTN_H + SH;
+            UGUIShip.CreateButton(root.transform, new Rect(PAD + w - arrow, 0f, arrow, BTN_H), ">", BTN_DARK, WHITE, FS_SM, new Action(() => StepCategory(1)));
 
-            float fetchW = 60f * UIScale.S;
-            _searchField = UGUIShip.CreateInputField(root.transform, new Rect(PAD, cy, w - fetchW - PAD, BTN_H),
-                "search by name", Color.black, WHITE, FS_SM);
-            _searchField.onEndEdit.AddListener(new Action<string>(v => OnFetch()));
-            UGUIShip.CreateButton(root.transform, new Rect(PAD + w - fetchW, cy, fetchW, BTN_H),
-                "Search", BTN_BLUE, WHITE, FS_SM, new Action(OnFetch));
-            cy += BTN_H + SH;
+            float cy = BTN_H + SH;
+            var search = UGUIShip.CreateInputField(root.transform, new Rect(PAD, cy, w, BTN_H),
+                "search by name", new Color(0f, 0f, 0f, 0.4f), WHITE, FS_SM);
+            search.onValueChanged.AddListener(new Action<string>(v => { _filter = v?.Trim() ?? ""; RebuildTiles(); }));
 
-            var scroll = UGUIShip.CreateScrollView(root.transform, new Rect(PAD, cy, w, bodyH - cy - SH));
+            float gridY = cy + BTN_H + SH;
+            var scroll = UGUIShip.CreateScrollView(root.transform, new Rect(PAD, gridY, w, bodyH - gridY));
             _resultContent = scroll.content;
-            var layout = _resultContent.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-            layout.spacing = 1f;
+            _tile = Mathf.Floor((w - UGUIShip.SCROLLBAR_INSET * 2f - 4f - TileGap * (GridCols - 1)) / GridCols);
+            var grid = _resultContent.gameObject.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(_tile, _tile);
+            grid.spacing = new Vector2(TileGap, TileGap);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = GridCols;
+            grid.padding = new RectOffset(2, 2, 2, 2);
             _resultContent.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            RebuildResultRows();
+            LoadCategory();
+            RebuildTiles();
         }
 
         private void StepCategory(int d)
         {
             _category = (Category)(((int)_category + d + CATEGORY_LABELS.Length) % CATEGORY_LABELS.Length);
-            _results.Clear();
             _selectedCostumeIds.Clear();
             _selectedSingleId = "";
             _categoryLbl.text = CATEGORY_LABELS[(int)_category];
-            RebuildResultRows();
+            LoadCategory();
+            RebuildTiles();
             RefreshStep();
         }
 
-        private void OnFetch()
+        private void LoadCategory()
         {
-            string filter = _searchField?.text?.Trim() ?? "";
-            StartCoroutine(FetchRoutine(filter).WrapToIl2Cpp());
-        }
-
-        private IEnumerator FetchRoutine(string filter)
-        {
-            _results.Clear();
-            RebuildResultRows();
-            SetStatus("fetching...");
-            yield return null;
-
+            _all.Clear();
+            _allNames.Clear();
             var type = _category == Category.Colour ? Il2CppType.Of<ColourOption>()
                 : _category == Category.Pattern ? Il2CppType.Of<SkinPatternOption>()
                 : _category == Category.Faceplate ? Il2CppType.Of<FaceplateOption>()
@@ -136,13 +133,11 @@ namespace BetterFG.UI.Tab
                 : Il2CppType.Of<CostumeOption>();
 
             var raw = Resources.FindObjectsOfTypeAll(type);
-            if (raw == null || raw.Length == 0) { SetStatus("none found"); yield break; }
-
             var seen = new HashSet<string>();
-            for (int i = 0; i < raw.Length && _results.Count < 120; i++)
+            for (int i = 0; i < raw.Length; i++)
             {
                 if (raw[i] == null) continue;
-                UnityEngine.Object opt = null;
+                UnityEngine.Object opt;
                 try
                 {
                     if (_category == Category.Colour) opt = raw[i].Cast<ColourOption>();
@@ -152,64 +147,73 @@ namespace BetterFG.UI.Tab
                     else opt = raw[i].Cast<CostumeOption>();
                 }
                 catch { continue; }
-                if (_category == Category.Emote && !seen.Add(GetOptionId(opt))) continue;
-                string name = AllCosmeticsTab.GetDisplayName(opt);
-                if (string.IsNullOrEmpty(filter) || name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
-                    _results.Add(opt);
+                if (!seen.Add(GetOptionId(opt))) continue;
+                _all.Add(opt);
+                _allNames.Add(AllCosmeticsTab.GetDisplayName(opt));
             }
-
-            SetStatus(_results.Count + " result(s)");
-            RebuildResultRows();
         }
 
-        private void RebuildResultRows()
+        private void RebuildTiles()
         {
+            if (_resultContent == null) return;
+            _results.Clear();
+            for (int i = 0; i < _all.Count && _results.Count < MaxTiles; i++)
+                if (_allNames[i].IndexOf(_filter, StringComparison.OrdinalIgnoreCase) >= 0)
+                    _results.Add(_all[i]);
+
+            _tiles.Clear();
+            _resultContent.anchoredPosition = new Vector2(_resultContent.anchoredPosition.x, 0f);
             for (int i = _resultContent.childCount - 1; i >= 0; i--)
                 GameObject.Destroy(_resultContent.GetChild(i).gameObject);
-
-            if (_results.Count == 0)
-            {
-                UGUIShip.CreateLabel(_resultContent, new Rect(6f, 0f, TabWidth, ROW_H), "search to find items", FS_SM, HINT);
-                return;
-            }
 
             for (int i = 0; i < _results.Count; i++)
             {
                 int idx = i;
-                string id = GetOptionId(_results[i]);
-                bool isSel = _category == Category.Costume ? _selectedCostumeIds.Contains(id) : _selectedSingleId == id;
+                var opt = _results[i];
+                var btn = UGUIShip.CreateButton(_resultContent, new Rect(0f, 0f, _tile, _tile), "",
+                    IsSelected(opt) ? ROW_SEL : ROW_IDLE, WHITE, FS_SM, new Action(() => SelectResult(idx)));
+                BetterFGUIMan.MakeObjectTooltip(btn.GetComponent<RectTransform>(), AllCosmeticsTab.GetDisplayName(opt));
 
-                var btn = UGUIShip.CreateButton(_resultContent, new Rect(0f, 0f, 0f, ROW_H), "",
-                    isSel ? ROW_SEL : ROW_IDLE, WHITE, FS_SM, new Action(() => SelectResult(idx)));
-                btn.transition = Selectable.Transition.None;
-                var trigger = btn.GetComponent<UnityEngine.EventSystems.EventTrigger>();
-                if (trigger != null) GameObject.Destroy(trigger);
-                var le = btn.gameObject.AddComponent<LayoutElement>();
-                le.preferredHeight = ROW_H;
-                le.flexibleWidth = 1f;
+                var fillGo = new GameObject("Art");
+                fillGo.transform.SetParent(btn.transform, false);
+                var fillRt = fillGo.AddComponent<RectTransform>();
+                fillRt.anchorMin = Vector2.zero;
+                fillRt.anchorMax = Vector2.one;
+                fillRt.offsetMin = new Vector2(4f, 4f);
+                fillRt.offsetMax = new Vector2(-4f, -4f);
+                var fill = fillGo.AddComponent<Image>();
+                fill.color = TILE_FILL;
+                fill.raycastTarget = false;
 
-                Sprite icon = AllCosmeticsTab.GetIconSprite(_results[i]);
-                float iconSz = ROW_H - 4f;
-                float textX = 5f;
-                if (icon != null)
+                var picGo = new GameObject("Pic");
+                picGo.transform.SetParent(fillGo.transform, false);
+                var picRt = picGo.AddComponent<RectTransform>();
+                picRt.anchorMin = Vector2.zero;
+                picRt.anchorMax = Vector2.one;
+                picRt.offsetMin = new Vector2(2f, 2f);
+                picRt.offsetMax = new Vector2(-2f, -2f);
+                if (CosmeticCell.Wants(opt)) CosmeticCell.Fill(picGo.transform, opt);
+                else
                 {
-                    var iconGo = new GameObject("Icon");
-                    iconGo.transform.SetParent(btn.transform, false);
-                    var iconRt = iconGo.AddComponent<RectTransform>();
-                    iconRt.anchorMin = iconRt.anchorMax = new Vector2(0f, 0.5f);
-                    iconRt.pivot = new Vector2(0f, 0.5f);
-                    iconRt.anchoredPosition = new Vector2(3f, 0f);
-                    iconRt.sizeDelta = new Vector2(iconSz, iconSz);
-                    var img = iconGo.AddComponent<Image>();
-                    img.sprite = icon;
-                    img.preserveAspect = true;
-                    img.raycastTarget = false;
-                    textX = 3f + iconSz + 4f;
+                    var icon = AllCosmeticsTab.GetIconSprite(opt);
+                    if (icon != null)
+                    {
+                        var img = picGo.AddComponent<Image>();
+                        img.sprite = icon;
+                        img.preserveAspect = true;
+                        img.raycastTarget = false;
+                    }
                 }
-
-                UGUIShip.CreateLabel(btn.transform, new Rect(textX, 0f, TabWidth - PAD * 2f - textX - 8f, ROW_H),
-                    AllCosmeticsTab.GetDisplayName(_results[i]), FS_SM, WHITE, TextAnchor.MiddleLeft);
+                _tiles.Add(btn);
             }
+
+            SetStatus(_results.Count + " result(s)");
+        }
+
+        private bool IsSelected(UnityEngine.Object opt)
+        {
+            string id = GetOptionId(opt);
+            return _category == Category.Costume ? _selectedCostumeIds.Contains(id) : _selectedSingleId == id;
         }
 
         private void SelectResult(int idx)
@@ -228,7 +232,8 @@ namespace BetterFG.UI.Tab
                 _selectedSingleId = nowSelected ? id : "";
             }
 
-            RebuildResultRows();
+            for (int i = 0; i < _tiles.Count; i++)
+                UGUIShip.SetButtonSelected(_tiles[i], IsSelected(_results[i]), ROW_SEL);
             RefreshStep();
             SetStatus(name + (nowSelected ? " selected" : " deselected"));
         }
@@ -240,28 +245,28 @@ namespace BetterFG.UI.Tab
 
             if (_category == Category.Colour)
             {
-                var opt = FindResultById(_selectedSingleId);
+                var opt = FindById(_selectedSingleId);
                 if (opt == null) { SetStatus("pick a colour first"); return false; }
                 svc.ApplyGameColour(opt.Cast<ColourOption>());
                 return true;
             }
             if (_category == Category.Pattern)
             {
-                var opt = FindResultById(_selectedSingleId);
+                var opt = FindById(_selectedSingleId);
                 if (opt == null) { SetStatus("pick a pattern first"); return false; }
                 svc.ApplyGamePattern(opt.Cast<SkinPatternOption>());
                 return true;
             }
             if (_category == Category.Faceplate)
             {
-                var opt = FindResultById(_selectedSingleId);
+                var opt = FindById(_selectedSingleId);
                 if (opt == null) { SetStatus("pick a faceplate first"); return false; }
                 svc.ApplyGameFaceplate(opt.Cast<FaceplateOption>());
                 return true;
             }
             if (_category == Category.Emote)
             {
-                var opt = FindResultById(_selectedSingleId);
+                var opt = FindById(_selectedSingleId);
                 if (opt == null) { SetStatus("pick an emote first"); return false; }
                 if (_slot < 0) { SetStatus("pick a slot first"); return false; }
                 svc.ApplyGameEmote(opt.Cast<EmotesOption>(), _slot);
@@ -274,17 +279,17 @@ namespace BetterFG.UI.Tab
             var wantedIds = new HashSet<string>(_selectedCostumeIds);
             foreach (var entry in svc.GetAppliedGameCosmetics())
                 if (entry.kind == "costume" && entry.option != null) { combined.Add(entry.option.Cast<CostumeOption>()); wantedIds.Add(entry.id); }
-            foreach (var r in _results)
+            foreach (var r in _all)
                 if (_selectedCostumeIds.Contains(GetOptionId(r))) combined.Add(r.Cast<CostumeOption>());
 
             svc.ApplyGameCosmeticSelection(combined, wantedIds);
             return true;
         }
 
-        private UnityEngine.Object FindResultById(string id)
+        private UnityEngine.Object FindById(string id)
         {
             if (string.IsNullOrEmpty(id)) return null;
-            foreach (var r in _results)
+            foreach (var r in _all)
                 if (GetOptionId(r) == id) return r;
             return null;
         }

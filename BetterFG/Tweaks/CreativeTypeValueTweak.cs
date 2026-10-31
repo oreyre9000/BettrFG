@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using BetterFG.Core;
 using BetterFG.Features.CreativeIncrements;
 using BetterFG.Features.UnityRound.Editor;
 using BetterFG.Services;
@@ -40,18 +41,28 @@ namespace BetterFG.Tweaks
         private ParameterNodeViewModelString _node;
         private string _typed;
         private string _restore;
+        private NavPromptHandle _glyph;
+        private int _glyphIndex = -1;
+        private IntPtr _glyphNode;
+        private RectTransform _title;
+
+        public override void DisableTweak() { Cancel(); ClearGlyph(); }
 
         void Update()
         {
             if (!IsEnabled)
             {
                 if (_node != null) Cancel();
+                ClearGlyph();
                 return;
             }
 
             if (_node == null)
             {
-                if (EnterDown() && UnityRoundLoader.InLevelEditor) Begin();
+                if (!UnityRoundLoader.InLevelEditor || !LevelEditorParameterMenuViewModel.IsParametersScreenOpen())
+                { ClearGlyph(); return; }
+                SyncGlyph();
+                if (EnterDown()) Begin();
                 return;
             }
 
@@ -76,6 +87,54 @@ namespace BetterFG.Tweaks
         private static bool EnterDown() =>
             Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
 
+        private void SyncGlyph()
+        {
+            var vm = LevelEditorParameterMenuViewModel._instance;
+            if (vm == null) { ClearGlyph(); return; }
+
+            var node = SelectedNode();
+            IntPtr ptr = node == null ? IntPtr.Zero : node.Pointer;
+            if (ptr == _glyphNode && vm.SelectedIndex == _glyphIndex && (_glyph == null || _glyph.IsAlive)) return;
+
+            ClearGlyph();
+            _glyphNode = ptr;
+            _glyphIndex = vm.SelectedIndex;
+
+            if (node == null || !Resolve(node, out _, out _, out _, out _)) return;
+
+            var handlers = vm._inputHandlers;
+            int submit = handlers != null && handlers.Count > 0 ? handlers[0].SubmitAction : -1;
+            _glyph = NavPromptCore.From(NavPrompt.Report)
+                .WithLabel("", "bfg_creative_typevalue")
+                .CustomAnchors(new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                    new Vector2(18f, 0f))
+                .NoAutoResize()
+                .PollActions(submit)
+                .AlsoAcceptKey(KeyCode.Return)
+                .OwnGlyph()
+                .AllowWhileUnfocused()
+                .SpawnOn(node.transform);
+            if (_glyph == null)
+            {
+                Plugin.Log?.LogWarning($"type glyph: nothing spawned on row {_glyphIndex}, submit action {submit}");
+                return;
+            }
+
+            _glyph.GameObject.GetComponent<RectTransform>().sizeDelta = new Vector2(40f, 32f);
+            _glyph.GameObject.transform.Find("PromptText").gameObject.SetActive(false);
+            _title = node.transform.Find("ParamTitle").GetComponent<RectTransform>();
+            _title.offsetMin = new Vector2(42f, _title.offsetMin.y);
+        }
+
+        private void ClearGlyph()
+        {
+            if (_title != null) { _title.offsetMin = new Vector2(0f, _title.offsetMin.y); _title = null; }
+            _glyph?.Destroy();
+            _glyph = null;
+            _glyphIndex = -1;
+            _glyphNode = IntPtr.Zero;
+        }
+
         private void Begin()
         {
             var node = SelectedNode();
@@ -90,6 +149,7 @@ namespace BetterFG.Tweaks
             _restore = node.Value;
             node.Value = Prompt;
             FGInputLockService.SetParamTypeLock(true);
+            ClearGlyph();
         }
 
         private void Cancel()

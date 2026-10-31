@@ -148,13 +148,23 @@ namespace BetterFG.UI.Tab
                 float thumbSz = ROW_H - 6f;
                 var thumbGo = new GameObject("Thumb");
                 thumbGo.transform.SetParent(rowGo.transform, false);
-                UGUIShip.SetPixelRect(thumbGo.AddComponent<RectTransform>(), new Rect(3f, 3f, thumbSz, thumbSz));
-                var icon = thumbGo.AddComponent<Image>();
-                icon.raycastTarget = false;
-                icon.preserveAspect = true;
-                var sprite = menu ? SkinApplicationService.ResolveOptionIconSprite(entry.option) ?? GetIconSprite(entry.option) : null;
-                if (sprite != null) icon.sprite = sprite;
-                else icon.color = new Color(0f, 0f, 0f, 0.4f);
+                var thumbRt = thumbGo.AddComponent<RectTransform>();
+                if (menu && CosmeticCell.Wants(entry.option))
+                {
+                    float cellSz = thumbSz * 1.4f;
+                    UGUIShip.SetPixelRect(thumbRt, new Rect(3f + cellSz * 0.2f, 3f - cellSz * 0.2f, cellSz, cellSz));
+                    CosmeticCell.Fill(thumbGo.transform, entry.option);
+                }
+                else
+                {
+                    UGUIShip.SetPixelRect(thumbRt, new Rect(3f, 3f, thumbSz, thumbSz));
+                    var icon = thumbGo.AddComponent<Image>();
+                    icon.raycastTarget = false;
+                    icon.preserveAspect = true;
+                    var sprite = menu ? SkinApplicationService.ResolveOptionIconSprite(entry.option) ?? GetIconSprite(entry.option) : null;
+                    if (sprite != null) icon.sprite = sprite;
+                    else icon.color = new Color(0f, 0f, 0f, 0.4f);
+                }
 
                 float removeW = 22f * UIScale.S;
                 float nameX = 3f + thumbSz + 6f;

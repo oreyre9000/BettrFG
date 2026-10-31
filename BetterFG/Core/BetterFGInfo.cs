@@ -1,4 +1,4 @@
-namespace BetterFG.Core
+﻿namespace BetterFG.Core
 {
     public static partial class BetterFGInfo
     {
@@ -14,6 +14,10 @@ namespace BetterFG.Core
         public static string Version => MyPluginInfo.PLUGIN_VERSION;
 
         public static string WatermarkLine1 => "https://github.com/oreyre9000/BettrFG";
+        public const string DiscordUrl = "https://discord.com/invite/mNTtffa6Av";
+        public const string WebsiteUrl = "https://bettrfg.com";
+        public const string YoutubeUrl = "https://www.youtube.com/@bettrfg";
+        public const string PrivacyUrl = "https://bettrfg.com/privacy";
         // the "BettrFG" name is rendered as the logo image (see AddWatermarkLogoLine);
         // this is the rest of the line that follows it.
         public static string WatermarkLine2 => IsPublicRelease

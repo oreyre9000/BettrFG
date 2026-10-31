@@ -251,6 +251,48 @@ namespace BetterFG.UI.Windows
                     Plugin.Log?.LogWarning("couldn't open backup folder: " + ex.Message);
                 }
             });
+            BuildLinkRow(parent, "Privacy policy", BetterFG.Core.BetterFGInfo.PrivacyUrl);
+        }
+
+        private static void BuildLinkRow(RectTransform parent, string label, string url)
+        {
+            var linkCol = new Color(0.55f, 0.75f, 1f, 1f);
+            var rowGo = new GameObject("Link_" + label);
+            rowGo.transform.SetParent(parent, false);
+            var le = rowGo.AddComponent<LayoutElement>();
+            le.preferredHeight = ROW_H + 6f;
+            le.flexibleWidth = 1f;
+
+            var t = UGUIShip.CreateLabel(rowGo.transform, new Rect(0f, 0f, 100f, 16f), label, 12, linkCol, TextAnchor.MiddleCenter);
+            t.raycastTarget = true;
+            var rt = t.rectTransform;
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(100f, 16f);
+            t.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var line = new GameObject("Underline");
+            line.transform.SetParent(rt, false);
+            var lrt = line.AddComponent<RectTransform>();
+            lrt.anchorMin = Vector2.zero;
+            lrt.anchorMax = new Vector2(1f, 0f);
+            lrt.pivot = new Vector2(0.5f, 0f);
+            lrt.offsetMin = new Vector2(0f, 1f);
+            lrt.offsetMax = new Vector2(0f, 2f);
+            var underline = line.AddComponent<Image>();
+            underline.color = linkCol;
+            underline.raycastTarget = false;
+
+            var btn = t.gameObject.AddComponent<Button>();
+            btn.targetGraphic = t;
+            var cb = btn.colors;
+            cb.normalColor = new Color(1f, 1f, 1f, 0.8f);
+            cb.selectedColor = cb.normalColor;
+            cb.highlightedColor = Color.white;
+            cb.pressedColor = new Color(0.7f, 0.7f, 0.7f, 1f);
+            cb.fadeDuration = 0.08f;
+            btn.colors = cb;
+            btn.onClick.AddListener(new Action(() => Application.OpenURL(url)));
         }
 
         // simple label + button row that just fires an action, no state to track

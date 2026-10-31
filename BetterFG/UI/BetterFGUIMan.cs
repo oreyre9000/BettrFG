@@ -1103,14 +1103,14 @@ namespace BetterFG.UI
         }
 
         // ── Tooltip ───────────────────────────────────────────────────────────
-        public static void MakeObjectTooltip(RectTransform rt, string text, bool silent = false)
+        public static void MakeObjectTooltip(RectTransform rt, string text, bool silent = true)
         {
             var t = rt.gameObject.AddComponent<TooltipTrigger>();
             t.text = text;
             t.silent = silent;
         }
 
-        public void ShowTooltip(string text, bool silent = false)
+        public void ShowTooltip(string text, bool silent = true)
         {
             if (_tooltip == null) return;
             if (!UnityMouseReady()) return;
@@ -1394,9 +1394,50 @@ namespace BetterFG.UI
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            AddWatermarkLine(BetterFGInfo.WatermarkLine1, new Color(1f, 1f, 1f, 0.28f));
+            AddWatermarkLinkLine(BetterFGInfo.WatermarkLine1, new Color(1f, 1f, 1f, 0.28f), 18f);
             AddWatermarkLogoLine(BetterFGInfo.WatermarkLine2, new Color(1f, 1f, 1f, 0.28f));
             AddWatermarkLine(BetterFGInfo.WatermarkLine3, new Color(1f, 1f, 0f, 0.28f));
+        }
+
+        private void AddWatermarkLinkLine(string text, Color color, float height)
+        {
+            var row = new GameObject("WMLinkLine");
+            row.transform.SetParent(_watermarkGo.transform, false);
+            row.AddComponent<RectTransform>();
+            row.AddComponent<LayoutElement>().preferredHeight = height;
+            var hlg = row.AddComponent<HorizontalLayoutGroup>();
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = false;
+            hlg.childAlignment = TextAnchor.MiddleLeft;
+            hlg.spacing = 6f;
+
+            var t = UGUIShip.CreateLabel(row.transform, default, text, 12, color, TextAnchor.MiddleLeft);
+            t.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            AddWatermarkIcon(row.transform, "discord", BetterFGInfo.DiscordUrl);
+            AddWatermarkIcon(row.transform, "youtube", BetterFGInfo.YoutubeUrl);
+            AddWatermarkIcon(row.transform, "website", BetterFGInfo.WebsiteUrl);
+        }
+
+        private static void AddWatermarkIcon(Transform parent, string icon, string url)
+        {
+            var go = new GameObject("WM_" + icon);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<RectTransform>().sizeDelta = new Vector2(16f, 16f);
+            var le = go.AddComponent<LayoutElement>();
+            le.preferredWidth = 16f;
+            le.preferredHeight = 16f;
+            var img = go.AddComponent<RawImage>();
+            img.texture = EmbeddedResourceandUnity.LoadTexture($"BetterFG.assets.ui.{icon}.png");
+            var btn = go.AddComponent<Button>();
+            btn.targetGraphic = img;
+            var cb = btn.colors;
+            cb.normalColor = new Color(1f, 1f, 1f, 0.6f);
+            cb.selectedColor = cb.normalColor;
+            cb.highlightedColor = Color.white;
+            cb.pressedColor = new Color(0.75f, 0.75f, 0.75f, 1f);
+            cb.fadeDuration = 0.08f;
+            btn.colors = cb;
+            btn.onClick.AddListener(new Action(() => { AudioService.PlayButtonClick(); Application.OpenURL(url); }));
         }
 
         // line2 with the "BettrFG" name drawn as the logo image. a horizontal layout group
