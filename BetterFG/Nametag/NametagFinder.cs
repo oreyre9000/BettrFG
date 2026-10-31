@@ -3,7 +3,6 @@ using FGClient;
 using PartyMenu;
 using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace BetterFG.Nametag
 {
@@ -19,18 +18,7 @@ namespace BetterFG.Nametag
             "LocalPlayerNameTag(Clone)",
         };
 
-        // the local nametag lives under one of two HUD parents — resolve by direct path, NO FindObjectsOfType
-        // (those scan the whole scene through interop and were the respawn hitch):
-        //   3D:     <CAMERAS root>/LevelCameras_*/Main Camera Brain/PlayerInfoHUD/Parent
-        //   canvas: UICanvas_Client_V2(Clone)/Default/InGameUiManager(Clone)/PersistentUnderlayUI/PB_InfoHUD/Parent
-        // both parents can exist at once, so we don't pick "a parent" and stop — we look for the actual local
-        // nametag child under each and return the first that has one (3D is the usual in-game surface).
-        private const string CANVAS_HUD_PARENT_PATH =
-            "UICanvas_Client_V2(Clone)/Default/InGameUiManager(Clone)/PersistentUnderlayUI/PB_InfoHUD/Parent";
-        private const string CAMERAS_HUD_SUBPATH = "Main Camera Brain/PlayerInfoHUD/Parent";
-
         private static Transform _nameTagParent;
-        private static float _nextHudScan;
 
         private static Transform LocalTagUnder(Transform parent)
         {
@@ -50,12 +38,6 @@ namespace BetterFG.Nametag
                 if (cached != null) return cached;
             }
 
-            var byPath = FindLocalNameTagSpriteByPath();
-            if (byPath != null) return byPath;
-
-            if (Time.unscaledTime < _nextHudScan) return null;
-            _nextHudScan = Time.unscaledTime + 1f;
-
             foreach (var hud in UnityEngine.Object.FindObjectsOfType<PlayerInfoHUDBase>(true))
             {
                 if ((hud.gameObject.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
@@ -66,48 +48,6 @@ namespace BetterFG.Nametag
                 _nameTagParent = parent.transform;
                 return t;
             }
-
-            return null;
-        }
-
-        private static Transform FindLocalNameTagSpriteByPath()
-        {
-            // 3D HUD first. the CAMERAS root's leading dash count varies across scenes, and the camera rig child
-            // is named per-mode (LevelCameras_LevelEditor in UGC editor, a different suffix in normal rounds) —
-            // hardcoding LevelCameras_LevelEditor is why the tag only showed in editor rounds. match the root by
-            // "CAMERAS", its child by "LevelCameras_" prefix, then walk the fixed sub-path. iterating roots is cheap.
-            int sceneCount = SceneManager.sceneCount;
-            for (int s = 0; s < sceneCount; s++)
-            {
-                var scene = SceneManager.GetSceneAt(s);
-                if (!scene.isLoaded) continue;
-                foreach (var root in scene.GetRootGameObjects())
-                {
-                    if (root == null || root.name.IndexOf("CAMERAS", System.StringComparison.Ordinal) < 0) continue;
-                    var rt = root.transform;
-                    for (int c = 0; c < rt.childCount; c++)
-                    {
-                        var rig = rt.GetChild(c);
-                        if (!rig.name.StartsWith("LevelCameras_", System.StringComparison.Ordinal)) continue;
-                        var parent = rig.Find(CAMERAS_HUD_SUBPATH);
-                        if (parent == null) continue;
-                        foreach (var name in NAMETAG_NAMES)
-                        {
-                            var t = parent.Find(name);
-                            if (t != null) return t;
-                        }
-                    }
-                }
-            }
-
-            // canvas HUD (PB_InfoHUD): fixed absolute path, GameObject.Find is a direct walk (no scan)
-            var canvas = GameObject.Find(CANVAS_HUD_PARENT_PATH);
-            if (canvas != null)
-                foreach (var name in NAMETAG_NAMES)
-                {
-                    var t = canvas.transform.Find(name);
-                    if (t != null) return t;
-                }
 
             return null;
         }

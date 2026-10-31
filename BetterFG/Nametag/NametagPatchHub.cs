@@ -249,9 +249,6 @@ namespace BetterFG.Nametag
                     for (int i = 0; i < vms.Length; i++)
                         HandleViewModel(vms[i], null);
 
-                // the local tag resolves the in-round HUD mode-agnostically (CAMERAS root + LevelCameras_
-                // prefix, or the canvas PB_InfoHUD), so walk up from it to the HUD that holds every bean row
-                // instead of re-hardcoding paths that only matched the UGC editor rig.
                 var hudBase = NametagFinder.FindLocalNameTagSprite()?.GetComponentInParent<PlayerInfoHUDBase>();
                 var spawned = hudBase?._spawnedInfoObjects;
                 if (spawned == null) return;
