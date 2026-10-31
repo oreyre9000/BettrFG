@@ -1,6 +1,6 @@
 **/bin/
 **/obj/
-Code/BetterFG/BuildHash.g.cs
+BetterFG/BuildHash.g.cs
 .vs/
 *.vsidx
 *.user
@@ -9,15 +9,16 @@ Code/BetterFG/BuildHash.g.cs
 *~
 *- Backup*
 
-Code/BetterFG.Installer/payload/
-Code/BetterFG.Installer/payload_stage/
-Code/BetterFG.Installer/plugin_only_stage/
-Code/BetterFG.Installer/publish/
+BetterFG.Installer/payload/
+BetterFG.Installer/payload_stage/
+BetterFG.Installer/plugin_only_stage/
+BetterFG.Installer/publish/
+BetterFG.Installer/payload_src
 
 _creator_deploy_test/
 .roundtemplate_pkg/
 *.md
-Code/BetterFG.Installer/payload_src
-Code/BetterFG/Customization/Profiles/
-Code/BetterFG/UI/Windows/ProfilesWindow.cs
-Code/BetterFG/Patches/PatchEAC.cs
+BetterFG/Customization/Profiles/
+BetterFG/UI/Windows/ProfilesWindow.cs
+BetterFG/Patches/PatchEAC.cs
+BetterFG/build/
