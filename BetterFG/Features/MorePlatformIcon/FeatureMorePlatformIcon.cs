@@ -236,7 +236,7 @@ namespace BetterFG.Features.MorePlatformIcon
                 if (text.gameObject.name != "Text" || text.transform.parent.name != "Content") continue;
 
                 string visible = NametagIconApplicator.BuildInlinePlatformName(text.text ?? "", "", true);
-                ApplyPrivateLobbyCustomName(text.transform.parent, BetterFG.Tweaks.StripSizeTagsTweak.Strip(visible).Trim());
+                ApplyPrivateLobbyCustomName(text.transform.parent, NametagIconApplicator.StripRichText(visible).Trim());
             }
         }
 
@@ -339,7 +339,7 @@ namespace BetterFG.Features.MorePlatformIcon
             {
                 string localName = GlobalGameStateClient.Instance?.GetLocalPlayerName() ?? "";
                 string localKey = GlobalGameStateClient.Instance?.GetLocalPlayerKey() ?? "";
-                string displayName = BetterFG.Tweaks.StripSizeTagsTweak.Strip(LocalPlayerInfo.DisplayName);
+                string displayName = NametagIconApplicator.StripRichText(LocalPlayerInfo.DisplayName);
                 if (row == null || string.IsNullOrEmpty(localName) || string.IsNullOrEmpty(displayName)) return;
 
                 var text = row.Find("Panel/Content/Text")?.GetComponent<TextMeshProUGUI>();
@@ -355,11 +355,11 @@ namespace BetterFG.Features.MorePlatformIcon
                 }
                 else
                 {
-                    string cleanVisible = BetterFG.Tweaks.StripSizeTagsTweak.Strip(
+                    string cleanVisible = NametagIconApplicator.StripRichText(
                         NametagIconApplicator.BuildInlinePlatformName(visible, "", true)).Trim();
-                    string cleanMatch = BetterFG.Tweaks.StripSizeTagsTweak.Strip(
+                    string cleanMatch = NametagIconApplicator.StripRichText(
                         NametagIconApplicator.BuildInlinePlatformName(m, "", true)).Trim();
-                    string cleanLocal = BetterFG.Tweaks.StripSizeTagsTweak.Strip(localName).Trim();
+                    string cleanLocal = NametagIconApplicator.StripRichText(localName).Trim();
                     if (!string.Equals(cleanMatch, cleanLocal, StringComparison.OrdinalIgnoreCase) &&
                         !string.Equals(cleanVisible, cleanLocal, StringComparison.OrdinalIgnoreCase))
                         return;

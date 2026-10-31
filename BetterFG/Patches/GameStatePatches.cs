@@ -1573,16 +1573,6 @@ namespace BetterFG.Patches.GameStates
     [HarmonyPatch(typeof(GlobalGameStateClient), "HandleServerStartRound")]
     public class HandleServerStartRoundPa
     {
-        [HarmonyPrefix]
-        public static void Prefix()
-        {
-            if (!BetterFG.Tweaks.StripSizeTagsTweak.Active) return;
-            foreach (var obj in Resources.FindObjectsOfTypeAll<PlayerInfoDisplayGameObject>())
-                obj.SetText(BetterFG.Tweaks.StripSizeTagsTweak.Strip(obj._text.text));
-            foreach (var obj in Resources.FindObjectsOfTypeAll<PlayerInfoDisplayCanvas>())
-                obj.SetText(BetterFG.Tweaks.StripSizeTagsTweak.Strip(obj._text.text));
-        }
-
         [HarmonyPostfix]
         public static void Postfix()
         {
@@ -1630,23 +1620,6 @@ namespace BetterFG.Patches.GameStates
             // refresh once a second for 2s to catch late spawners.
             if (platformHost != null)
                 platformHost.StartCoroutine(PollNametagsAfterRoundStart().WrapToIl2Cpp());
-
-            // anti-grief <size> strip: only player-controlled nametag text can carry a malicious
-            // <size> tag, so only sweep those two HUDs instead of every TMP_Text in the scene.
-            foreach (var hudPath in new[]
-            {
-                "----------------CAMERAS/LevelCameras_LevelEditor/Main Camera Brain/PlayerInfoHUD",
-                "UICanvas_Client_V2(Clone)/Default/InGameUiManager(Clone)/PersistentUnderlayUI/PB_InfoHUD/Parent",
-            })
-            {
-                var hud = GameObject.Find(hudPath);
-                if (hud == null) continue;
-                foreach (var tmp in hud.GetComponentsInChildren<TMPro.TMP_Text>(true))
-                {
-                    if (tmp != null && !string.IsNullOrEmpty(tmp.text))
-                        tmp.text = BetterFG.Tweaks.StripSizeTagsTweak.Strip(tmp.text);
-                }
-            }
 
             try
             {

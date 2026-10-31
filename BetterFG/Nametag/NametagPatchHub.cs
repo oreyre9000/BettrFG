@@ -107,30 +107,6 @@ namespace BetterFG.Nametag
             }
         }
 
-        [BetterFG.Utilities.BfgPatchGate("tweak.strip_size_tags", defaultOn: true)]
-        [HarmonyPatch(typeof(PrivateLobbyPlayerListEntryViewModel), "PlayerName", MethodType.Setter)]
-        internal static class patch_PlayerListEntryName
-        {
-            [HarmonyPrefix]
-            public static void Prefix(ref string value)
-            {
-                if (StripSizeTagsTweak.Active) value = StripSizeTagsTweak.Strip(value);
-            }
-        }
-
-        [BetterFG.Utilities.BfgPatchGate("tweak.strip_size_tags", defaultOn: true)]
-        [HarmonyPatch(typeof(PlayerNameManager), nameof(PlayerNameManager.GetNameToDisplayForPlayer))]
-        internal static class patch_GetNameToDisplayForPlayer
-        {
-            [HarmonyPrefix]
-            public static void Prefix(ref string platformAccountName, ref string playerGeneratedName)
-            {
-                if (!StripSizeTagsTweak.Active) return;
-                platformAccountName = StripSizeTagsTweak.Strip(platformAccountName);
-                playerGeneratedName = StripSizeTagsTweak.Strip(playerGeneratedName);
-            }
-        }
-
         // a respawn teleport completing is the reliable "player is back" signal — the alpha->1 path only
         // fires cleanly when you manually unhide the nametag, so on a normal checkpoint respawn the crown
         // never got re-pinned. End() runs when the teleport finishes (our respawn button AND the game's own

@@ -215,7 +215,6 @@ namespace BetterFG
             ClassInjector.RegisterTypeInIl2Cpp<SpectatorMusicTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<MuteSocialSoundsTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<BringBackFallGuyNoisesTweak>();
-            ClassInjector.RegisterTypeInIl2Cpp<StripSizeTagsTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<FallFeedQualTimeTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<MaxFallFeedTweak>();
             ClassInjector.RegisterTypeInIl2Cpp<Background3dTweak>();

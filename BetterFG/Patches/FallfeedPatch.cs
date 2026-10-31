@@ -118,7 +118,6 @@ namespace BetterFG.Patches
             _styledRows.Add(nameText.m_CachedPtr);
 
             string fallback = displayName;
-            if (StripSizeTagsTweak.Active) fallback = StripSizeTagsTweak.Strip(fallback);
             NametagIconApplicator.ApplyRemoteToNameplate(nameText, fallback, info);
 
             string nameStyle = info.nameStyle ?? "";

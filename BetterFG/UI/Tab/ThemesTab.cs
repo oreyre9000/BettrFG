@@ -501,6 +501,13 @@ namespace BetterFG.UI.Tab
             _scPreviewCircles = ScreenBackgroundService.FindCirclesChild(_scPreviewGo.transform)?.GetComponent<Image>();
             _scPreviewDefaultPatternSprite = _scPreviewCircles != null ? _scPreviewCircles.sprite : null;
             _scPreviewDefaultPatternType = _scPreviewCircles != null ? _scPreviewCircles.type : Image.Type.Simple;
+            if (_scPreviewCircles != null && _scPreviewCircles.type == Image.Type.Tiled && _scPreviewCircles.transform.parent == _scPreviewGo.transform)
+            {
+                var prt = _scPreviewCircles.rectTransform;
+                prt.anchorMin = prt.anchorMax = prt.pivot = new Vector2(0.5f, 0.5f);
+                prt.anchoredPosition = Vector2.zero;
+                prt.sizeDelta = holderRt.rect.size / _scPreviewGo.transform.localScale.x;
+            }
 
             if (_scPreviewCircles != null && _scPreviewCircles.material != null)
             {

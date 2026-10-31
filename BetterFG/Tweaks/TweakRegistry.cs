@@ -89,7 +89,6 @@ namespace BetterFG.Tweaks
             Add<MatchmakingQueueCountTweak>(TweakCategory.Utility);
             Add<CustomCursorTweak>(TweakCategory.Utility);
             Add<HideCreatorCodeTweak>(TweakCategory.Utility);
-            Add<StripSizeTagsTweak>(TweakCategory.Utility);
             Add<FallFeedQualTimeTweak>(TweakCategory.Utility);
             Add<MaxFallFeedTweak>(TweakCategory.Utility);
             Add<ShowServerInfoTweak>(TweakCategory.Utility);
