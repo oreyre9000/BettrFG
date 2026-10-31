@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>BettrFG.Installer</AssemblyName>
+    <RootNamespace>BetterFG.Installer</RootNamespace>
+    <Product>$(BettrFGInstallerName)</Product>
+    <Version>$(BettrFGVersion)</Version>
+    <AssemblyVersion>$(BettrFGVersion)</AssemblyVersion>
+    <FileVersion>$(BettrFGVersion)</FileVersion>
+    <InformationalVersion>$(BettrFGVersion)</InformationalVersion>
+    <AssemblyTitle>$(BettrFGInstallerName)</AssemblyTitle>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <ApplicationHighDpiMode>DpiUnaware</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="assets\\betterfg.ico" />
+    <None Remove="assets\button_shine_pinkbg.png" />
+    <None Remove="assets\button_shine_bluebg.png" />
+    <None Remove="assets\button_shine_yellowbg.png" />
+    <None Remove="assets\icon_logo_steam.png" />
+    <None Remove="assets\icon_logo_epic.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="assets\\betterfg.ico" />
+    <EmbeddedResource Include="assets\button_shine_pinkbg.png" />
+    <EmbeddedResource Include="assets\button_shine_bluebg.png" />
+    <EmbeddedResource Include="assets\button_shine_yellowbg.png" />
+    <EmbeddedResource Include="assets\icon_logo_steam.png" />
+    <EmbeddedResource Include="assets\icon_logo_epic.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\BetterFG\assets\ui\windows\generalbg.png" Link="assets\ui\windows\generalbg.png" />
+    <EmbeddedResource Include="..\BetterFG\assets\ui\windows\generalbg_hover.png" Link="assets\ui\windows\generalbg_hover.png" />
+    <EmbeddedResource Include="..\BetterFG\assets\ui\betterfglogo.png" Link="assets\ui\betterfglogo.png" />
+  </ItemGroup>
+
+  <Target Name="standaloneInstallerPublish" AfterTargets="Build" Condition="'$(SkipInstallerPublish)' != 'true'">
+    <PropertyGroup>
+      <InstallerPromptSilent Condition="'$(BuildingInsideVisualStudio)' != 'true' Or '$(DesignTimeBuild)' == 'true'">-Silent</InstallerPromptSilent>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -STA -File &quot;$(MSBuildProjectDirectory)\..\prompt_installer.ps1&quot; $(InstallerPromptSilent)" ConsoleToMSBuild="true" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" ItemName="InstallerPromptRaw" />
+    </Exec>
+    <ItemGroup>
+      <InstallerCopyFlag Include="$([System.String]::Copy('%(InstallerPromptRaw.Identity)').Substring(14))" Condition="$([System.String]::Copy('%(InstallerPromptRaw.Identity)').StartsWith('INSTALLERCOPY:'))" />
+    </ItemGroup>
+    <PropertyGroup>
+      <InstallerCopyVal>@(InstallerCopyFlag)</InstallerCopyVal>
+    </PropertyGroup>
+    <ItemGroup>
+      <InstallerDeployTarget Include="$([System.String]::Copy('%(InstallerPromptRaw.Identity)').Substring(14))" Condition="$([System.String]::Copy('%(InstallerPromptRaw.Identity)').StartsWith('INSTALLERDEST:')) And '$(InstallerCopyVal)' == '1'" />
+    </ItemGroup>
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\publish_installer.ps1&quot; -Configuration $(Configuration)" />
+    <MakeDir Directories="@(InstallerDeployTarget)" Condition="'@(InstallerDeployTarget)' != ''" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\publish\$(Configuration)\win-x64\BettrFG.Installer.exe" DestinationFolder="%(InstallerDeployTarget.Identity)" SkipUnchangedFiles="false" Condition="'@(InstallerDeployTarget)' != ''" />
+    <Message Importance="high" Text="Installer copied to %(InstallerDeployTarget.Identity)" Condition="'@(InstallerDeployTarget)' != ''" />
+  </Target>
+</Project>

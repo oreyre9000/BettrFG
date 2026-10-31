@@ -1,0 +1,112 @@
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using BepInEx.Unity.IL2CPP.Utils.Collections;
+using BetterFG.Services;
+using BettrFG.uGUI;
+using UnityEngine;
+
+namespace BetterFG.Features.Onboarding
+{
+    public class PromptHost : MonoBehaviour
+    {
+        public PromptHost(IntPtr ptr) : base(ptr) { }
+
+        protected Canvas _canvas;
+        protected Canvas _blockerCanvas;
+        protected OnboardingBlocker _blocker;
+        protected GameObject _popup;
+        private readonly List<Canvas> _hidden = new List<Canvas>();
+        private readonly List<GameObject> _hiddenRoots = new List<GameObject>();
+        protected bool CornerPops = true;
+
+        protected void CreateSurfaces(string name, int canvasOrder, int blockerOrder, bool hideRest = false)
+        {
+            if (hideRest)
+                foreach (var c in UIScaleService.All)
+                    if (c != null && c.enabled && c != LoadingScreenService.Canvas && !c.name.EndsWith("Backdrop")
+                        && c.transform.root.GetComponent<BetterFG.UI.Windows.BetterFGWindow>() == null) { c.enabled = false; _hidden.Add(c); }
+            if (hideRest)
+                foreach (var c in Resources.FindObjectsOfTypeAll<Canvas>())
+                    if (c.enabled && c.isRootCanvas && c.gameObject.scene.IsValid() && c.transform.root.name.StartsWith("BetterFG_")
+                        && c != LoadingScreenService.Canvas && !c.name.EndsWith("Backdrop"))
+                    {
+                        var root = c.transform.root.gameObject;
+                        if (root.GetComponent<BetterFG.UI.Windows.BetterFGWindow>() != null) { root.SetActive(false); _hiddenRoots.Add(root); }
+                        else { c.enabled = false; _hidden.Add(c); }
+                    }
+
+            _blockerCanvas = UGUIShip.CreateCanvas("BetterFG_" + name + "Blocker");
+            _blockerCanvas.sortingOrder = blockerOrder;
+            _blocker = new OnboardingBlocker(_blockerCanvas);
+            _blocker.SetHole(null);
+
+            _canvas = UGUIShip.CreateCanvas("BetterFG_" + name + "Canvas");
+            _canvas.sortingOrder = canvasOrder;
+        }
+
+        protected void Swap(GameObject next)
+        {
+            if (_popup != null) StartCoroutine(CloseThenDestroy(_popup).WrapToIl2Cpp());
+            _popup = next;
+            StartCoroutine(Open(next).WrapToIl2Cpp());
+        }
+
+        protected void CloseCurrent()
+        {
+            if (_popup == null) return;
+            StartCoroutine(CloseThenDestroy(_popup).WrapToIl2Cpp());
+            _popup = null;
+        }
+
+        public static IEnumerator CloseThenDestroy(GameObject go)
+        {
+            var rt = go.GetComponent<RectTransform>();
+            float e = 0f;
+            while (e < OnboardingPopup.AnimDur)
+            {
+                if (go == null) yield break;
+                e += Time.unscaledDeltaTime;
+                rt.localScale = new Vector3(1f - Mathf.Clamp01(e / OnboardingPopup.AnimDur), 1f, 1f);
+                yield return null;
+            }
+            if (go != null) UnityEngine.Object.Destroy(go);
+        }
+
+        protected IEnumerator Open(GameObject go)
+        {
+            yield return OpenPopup(go);
+            if (CornerPops && go != null) OnboardingPopup.AddCornerPops(go);
+        }
+
+        public static IEnumerator OpenPopup(GameObject go)
+        {
+            var rt = go.GetComponent<RectTransform>();
+            float e = 0f;
+            while (e < OnboardingPopup.AnimDur)
+            {
+                if (go == null) yield break;
+                e += Time.unscaledDeltaTime;
+                rt.localScale = new Vector3(
+                    OnboardingPopup.OpenCurve.Evaluate(Mathf.Clamp01(e / OnboardingPopup.AnimDur)), 1f, 1f);
+                yield return null;
+            }
+            if (go != null) rt.localScale = Vector3.one;
+        }
+
+        protected IEnumerator TearDownSurfaces()
+        {
+            if (_popup != null)
+            {
+                yield return CloseThenDestroy(_popup);
+                _popup = null;
+            }
+            if (_canvas != null) UnityEngine.Object.Destroy(_canvas.gameObject);
+            if (_blockerCanvas != null) UnityEngine.Object.Destroy(_blockerCanvas.gameObject);
+            foreach (var c in _hidden) if (c != null) c.enabled = true;
+            _hidden.Clear();
+            foreach (var go in _hiddenRoots) if (go != null) go.SetActive(true);
+            _hiddenRoots.Clear();
+        }
+    }
+}

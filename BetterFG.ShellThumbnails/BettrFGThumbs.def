@@ -1,0 +1,4 @@
+LIBRARY BettrFGThumbs
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

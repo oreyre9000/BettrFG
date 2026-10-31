@@ -1,0 +1,148 @@
+﻿using System.Collections.Generic;
+using BetterFG.Tweaks;
+using UnityEngine;
+
+namespace BetterFG.Tweaks
+{
+    // category buckets. order here = order the sections show up in the window.
+    public enum TweakCategory
+    {
+        Flow,
+        Gameplay,
+        Audio,
+        Lighting,
+        Utility,
+        Misc,
+    }
+
+    public static class TweakRegistry
+    {
+        private static readonly List<BfgTweak> _tweaks = new List<BfgTweak>();
+        // tweak -> which bucket it lives in. set when we Add() it below.
+        private static readonly Dictionary<BfgTweak, TweakCategory> _cat = new Dictionary<BfgTweak, TweakCategory>();
+
+        public static IReadOnlyList<BfgTweak> All => _tweaks;
+
+        // the order sections render in. matches the enum order.
+        public static readonly TweakCategory[] CategoryOrder =
+        {
+            TweakCategory.Flow,
+            TweakCategory.Gameplay,
+            TweakCategory.Audio,
+            TweakCategory.Lighting,
+            TweakCategory.Utility,
+            TweakCategory.Misc,
+        };
+
+        // every tweak in a given bucket, in the order they were registered.
+        public static IEnumerable<BfgTweak> InCategory(TweakCategory cat)
+        {
+            foreach (var t in _tweaks)
+                if (_cat[t] == cat)
+                    yield return t;
+        }
+
+        private static GameObject _host;
+
+        public static void Init()
+        {
+            _host = Plugin.Managers.Host(FallGuysLib.Managers.ModManagers.Client, "Prefab_Tweaks");
+
+            // ── Flow ── stuff that changes how you move through menus / matches
+            Add<SkipVictoryTweak>(TweakCategory.Flow);
+            Add<SkipRewardsTweak>(TweakCategory.Flow);
+            Add<LobbyShowSearchTweak>(TweakCategory.Flow);
+            Add<JoinLastLobbyTweak>(TweakCategory.Flow);
+            Add<LevelBrowserTweak>(TweakCategory.Flow);
+            Add<DisableAntiAfkTweak>(TweakCategory.Flow);
+            Add<StartupTitleScreenTweak>(TweakCategory.Flow);
+            Add<LeaveOnLoadingScreenTweak>(TweakCategory.Flow);
+            Add<DynamicQualScreenTweak>(TweakCategory.Flow);
+            Add<QualScreen60Tweak>(TweakCategory.Flow);
+            Add<FasterTransitionsTweak>(TweakCategory.Flow);
+
+            // ── Gameplay ──
+            //Add<InstantLandingIndicatorTweak>(TweakCategory.Gameplay);
+            Add<DisableCameraAssistTweak>(TweakCategory.Gameplay);
+            Add<CustomCameraTweak>(TweakCategory.Gameplay);
+            Add<DisableStepAssistTweak>(TweakCategory.Gameplay);
+            Add<ImmediateRespawnTweak>(TweakCategory.Gameplay);
+            Add<CinematicSpectatorTweak>(TweakCategory.Gameplay);
+            Add<SeenPlayersTweak>(TweakCategory.Gameplay);
+            Add<CreativeIntroCameraTweak>(TweakCategory.Gameplay);
+            Add<ObjectiveRoundNumberTweak>(TweakCategory.Gameplay);
+            Add<HideZoneArchEffectsTweak>(TweakCategory.Gameplay);
+            Add<PhraseCooldownBypassTweak>(TweakCategory.Gameplay);
+            Add<DisableInstructionControlsTweak>(TweakCategory.Gameplay);
+
+            // ── Audio ──
+            Add<SpectatorMusicTweak>(TweakCategory.Audio);
+            Add<MuteSocialSoundsTweak>(TweakCategory.Audio);
+            Add<DisablePlayerEmoticonsTweak>(TweakCategory.Audio);
+            Add<DisablePlayerPhrasesTweak>(TweakCategory.Audio);
+            Add<BringBackFallGuyNoisesTweak>(TweakCategory.Audio);
+            Add<DisableRtcVoiceChatTweak>(TweakCategory.Audio);
+
+            // ── Lighting ──
+            Add<PerformanceModeTweak>(TweakCategory.Lighting);
+            Add<ShadowDistanceTweak>(TweakCategory.Lighting);
+            Add<ShadowCustomResolutionTweak>(TweakCategory.Lighting);
+            Add<ShadowCascadeSplitTweak>(TweakCategory.Lighting);
+            Add<Ss2RoundLookTweak>(TweakCategory.Lighting);
+            Add<VisualEnhancerTweak>(TweakCategory.Lighting);
+
+            // ── Utility ──
+            Add<LobbyAutokickTweak>(TweakCategory.Utility);
+            Add<PlayerNameWarningTweak>(TweakCategory.Utility);
+            Add<LobbyAudioPromptTweak>(TweakCategory.Utility);
+            Add<MatchmakingQueueCountTweak>(TweakCategory.Utility);
+            Add<CustomCursorTweak>(TweakCategory.Utility);
+            Add<HideCreatorCodeTweak>(TweakCategory.Utility);
+            Add<StripSizeTagsTweak>(TweakCategory.Utility);
+            Add<FallFeedQualTimeTweak>(TweakCategory.Utility);
+            Add<ShowMedalOnQualifyTweak>(TweakCategory.Utility);
+            Add<SquadCantQualifyTweak>(TweakCategory.Utility);
+            Add<BetterFG.Features.AccountStats.WinStreakBurst>(TweakCategory.Utility);
+            Add<MaxFallFeedTweak>(TweakCategory.Utility);
+            Add<SkipNotificationTweak>(TweakCategory.Utility);
+            Add<ShowServerInfoTweak>(TweakCategory.Utility);
+            Add<FpsCounterTweak>(TweakCategory.Utility);
+            Add<DisableAgeRatingPopupTweak>(TweakCategory.Utility);
+            Add<ShowTilePlaysTweak>(TweakCategory.Utility);
+            Add<ShowTileDislikesTweak>(TweakCategory.Utility);
+            Add<ShowRoundsTweak>(TweakCategory.Utility);
+            Add<UpcomingShowsTweak>(TweakCategory.Utility);
+            Add<AlwaysShowTimerTweak>(TweakCategory.Utility);
+            Add<KeepNametagsTweak>(TweakCategory.Utility);
+            Add<LevelDescriptionOnPauseTweak>(TweakCategory.Utility);
+            Add<CreativeTypeValueTweak>(TweakCategory.Utility);
+            Add<BetterStickerSelectionTweak>(TweakCategory.Utility);
+            Add<PlaytestTrailTweak>(TweakCategory.Utility);
+            Add<EditorLevelMusicTweak>(TweakCategory.Utility);
+            Add<EditorFreeCameraTweak>(TweakCategory.Utility);
+            Add<SaveFailureDetailsTweak>(TweakCategory.Utility);
+            Add<LobbyCustomiserTweak>(TweakCategory.Utility);
+            Add<NotifyRoundStartTweak>(TweakCategory.Utility);
+            Add<RandomShowSelectTweak>(TweakCategory.Utility);
+            Add<FavouriteCreativeRoundsTweak>(TweakCategory.Utility);
+            Add<MultiShowSelectTweak>(TweakCategory.Utility);
+
+            // ── Misc ── cosmetic / everything else
+            Add<ChangeFallGuysLogo>(TweakCategory.Misc);
+            Add<ChangeSplashScreenTweak>(TweakCategory.Misc);
+            Add<Background3dTweak>(TweakCategory.Misc);
+            Add<RetroGoopMaterialsTweak>(TweakCategory.Misc);
+            //Add<AlwaysShowTimerTweak>(TweakCategory.Misc);
+            //Add<RefocusGame>(TweakCategory.Misc);
+
+            _host.AddComponent<LeaveToLobbyTweak>();
+        }
+
+        private static void Add<T>(TweakCategory cat) where T : BfgTweak
+        {
+            var t = _host.AddComponent<T>();
+            _tweaks.Add(t);
+            _cat[t] = cat;
+        }
+    }
+}

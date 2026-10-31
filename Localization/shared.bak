@@ -1,0 +1,13 @@
+﻿en	ko	fr	de	it	ja	pl	ru	zh-Hans	zh-Hant	es
+lang.name	English	한국어	Français	Deutsch	Italiano	日本語	Polski	Русский	简体中文	繁體中文	
+ui.add	Add	추가	Ajouter	Hinzufügen	Aggiungi	追加	Dodaj	Добавить	添加	新增	Añadir
+ui.back	< BACK	< 뒤로	< RETOUR	< ZURÜCK	< INDIETRO	< 戻る	< WSTECZ	< НАЗАД	< 返回	< 返回	< VOLVER
+ui.browse	Browse	찾아보기	Parcourir	Durchsuchen	Sfoglia	参照	Przeglądaj	Обзор	浏览	瀏覽	Buscar
+ui.cancel	Cancel	취소	Annuler	Abbrechen	Annulla	キャンセル	Anuluj	Отмена	取消	取消	Cancelar
+ui.delete	DELETE	삭제	SUPPRIMER	LÖSCHEN	ELIMINA	削除	USUŃ	УДАЛИТЬ	删除	刪除	ELIMINAR
+ui.edit	Edit	편집	Modifier	Bearbeiten	Modifica	編集	Edytuj	Изменить	编辑	編輯	Editar
+ui.filters	Filters	필터	Filtres	Filter	Filtri	フィルター	Filtry	Фильтры	筛选	篩選	Filtros
+ui.language	Language	언어	Langue	Sprache	Lingua	言語	Język	Язык	语言	語言	IDIOMA
+ui.next	NEXT >	다음 >	SUIVANT >	WEITER >	AVANTI >	次へ >	DALEJ >	ДАЛЕЕ >	下一步 >	下一步 >	SIGUIENTE >
+ui.open_folder	Open folder	폴더 열기	Ouvrir le dossier	Ordner öffnen	Apri cartella	フォルダーを開く	Otwórz folder	Открыть папку	打开文件夹	開啟資料夾	Abrir carpeta
+ui.sort	Sort	정렬	Trier	Sortieren	Ordina	並べ替え	Sortuj	Сортировка	排序	排序	Clasificar

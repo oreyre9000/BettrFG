@@ -1,0 +1,195 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{085DF5FB-F868-4FBC-9BF7-A380AF27A3BB}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>BetterFG.Creator</RootNamespace>
+    <AssemblyName>BetterFG.Creator</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <LangVersion>latest</LangVersion>
+    <CreatorUnityProject Condition="'$(CreatorUnityProject)' == ''">X:\bfgtest</CreatorUnityProject>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'EarlyAcesss|AnyCPU'">
+    <OutputPath>bin\EarlyAcesss\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'EarlyAccess_xb1|AnyCPU'">
+    <OutputPath>bin\EarlyAccess_xb1\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+    <Reference Include="D:\Programs\Unity\Unity 2021.3.16f1\Editor\Data\Managed\UnityEngine\Unity*.dll" Exclude="D:\Programs\Unity\Unity 2021.3.16f1\Editor\Data\Managed\UnityEngine\Unity.Cecil*.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(CreatorUnityProject)\Library\ScriptAssemblies\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(CreatorUnityProject)\Library\ScriptAssemblies\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\BetterFG\Utilities\Atlas.cs" Link="Hub\Ship\Atlas.cs" />
+    <Compile Include="..\BetterFG\Utilities\EmbeddedResourceandUnity.cs" Link="Hub\Ship\EmbeddedResourceandUnity.cs" />
+    <Compile Include="Hub\Ship\ShipShims.cs" />
+    <Compile Include="Hub\Ship\ShipHost.cs" />
+    <Compile Include="Hub\Ship\ShipInput.cs" />
+    <Compile Include="Hub\Ship\ShipLoc.cs" />
+    <EmbeddedResource Include="..\BetterFG\assets\atlas\ui.png" LogicalName="BetterFG.assets.atlas.ui.png" />
+    <EmbeddedResource Include="..\BetterFG\assets\atlas\ui.txt" LogicalName="BetterFG.assets.atlas.ui.txt" />
+    <EmbeddedResource Include="Hub\Ship\bettrfg_hub_leather" LogicalName="BetterFG.Creator.bettrfg_hub_leather" />
+    <EmbeddedResource Include="Hub\Ship\bettrfg_hub_tmp" LogicalName="BetterFG.Creator.bettrfg_hub_tmp" />  </ItemGroup>
+  <UsingTask TaskName="ShipUguiRewrite" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutDir ParameterType="System.String" Required="true" />
+      <Written ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Directory.CreateDirectory(OutDir);
+        var list = new System.Collections.Generic.List<Microsoft.Build.Framework.ITaskItem>();
+        foreach (var s in Sources)
+        {
+            string src = File.ReadAllText(s.ItemSpec);
+            src = Regex.Replace(src, @"public \w+\(IntPtr ptr\) : base\(ptr\) \{ \}", "");
+            src = src.Replace(".m_CachedPtr", ".CachedPtr()");
+            src = src.Replace("Object.Destroy(", "Object.DestroyImmediate(");
+            src = src.Replace("TMPro.TMP_FontAsset.CreateFontAsset(ttfPath, 0,", "ShipFonts.FromFile(ttfPath,");
+            string dst = Path.Combine(OutDir, s.GetMetadata("RecursiveDir").Replace('\\', '_') + Path.GetFileName(s.ItemSpec));
+            if (!File.Exists(dst) || File.ReadAllText(dst) != src) File.WriteAllText(dst, src);
+            list.Add(new Microsoft.Build.Utilities.TaskItem(dst));
+        }
+        Written = list.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="CreatorLocalization" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <LocDir>$(MSBuildProjectDirectory)\..\Localization</LocDir>
+      <LocOut>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)localization.bak</LocOut>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LocDir)\sync_localization_ids.ps1&quot; -BakPath &quot;$(LocDir)\creator.bak&quot; -ScanDirs &quot;$(MSBuildProjectDirectory)&quot; -KnownPaths &quot;$(LocDir)\shared.bak&quot; -Prefixes &quot;creator|ui|lang&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LocDir)\merge_localization.ps1&quot; -Inputs &quot;$(LocDir)\shared.bak,$(LocDir)\creator.bak&quot; -Out &quot;$(LocOut)&quot;" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(LocOut)" LogicalName="BetterFG.Creator.localization.bak" />
+    </ItemGroup>
+  </Target>
+  <Target Name="ShipUgui" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <ShipUguiSrc Include="..\BetterFG.uGUI\**\*.cs" Exclude="..\BetterFG.uGUI\obj\**;..\BetterFG.uGUI\bin\**" />
+    </ItemGroup>
+    <ShipUguiRewrite Sources="@(ShipUguiSrc)" OutDir="$(IntermediateOutputPath)ship">
+      <Output TaskParameter="Written" ItemName="ShipUguiOut" />
+    </ShipUguiRewrite>
+    <ItemGroup>
+      <Compile Include="@(ShipUguiOut)" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup>
+    <Compile Include="Shared\AssetBundleBuilder.cs" />
+    <Compile Include="Shared\CatalogBat.cs" />
+    <Compile Include="Shared\CoverImage.cs" />
+    <Compile Include="Hub\CreatorHubWindow.cs" />
+    <Compile Include="Hub\CreatorHubBrowse.cs" />
+    <Compile Include="Hub\CreatorHubRounds.cs" />
+    <Compile Include="Hub\CreatorHubBuild.cs" />
+    <Compile Include="Skins\SkinPreview.cs" Condition="Exists('$(MSBuildProjectDirectory)\Skins\SkinPreview.cs')" />
+    <Compile Include="Skins\SkinInfoJson.cs" />
+    <Compile Include="Skins\GroupSkinsWindow.cs" />
+    <Compile Include="Emotes\EmotePackagerWindow.cs" />
+    <Compile Include="Maps\MapCreate.cs" />
+    <Compile Include="Maps\MapCreatorWindow.cs" />
+    <Compile Include="Maps\MapInfoJson.cs" />
+    <Compile Include="Maps\BetterFGMapAsset.cs" />
+    <Compile Include="Maps\BetterFGMapAssetEditor.cs" />
+    <Compile Include="Reference\ReferenceSpawner.cs" />
+    <Compile Include="Reference\BaseRigAsset.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Reference\Files\itemdummy.unitypackage" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Reference\Files\roundtemplate.unitypackage" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Reference\Files\animationbean.unitypackage" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Reference\Files\baserig.blend" />
+    <EmbeddedResource Include="Reference\Files\fganims.dat" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Skins\group_skins.bat">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <Target Name="deploycreator" AfterTargets="Build" Condition="'$(SkipCreatorDeploy)' != 'true'">
+    <PropertyGroup>
+      <CreatorDeploySilent Condition="'$(BuildingInsideVisualStudio)' != 'true' Or '$(NoCreatorPrompt)' == 'true' Or '$(DesignTimeBuild)' == 'true'">-Silent</CreatorDeploySilent>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -STA -File &quot;$(MSBuildProjectDirectory)\..\prompt_editor.ps1&quot; $(CreatorDeploySilent)" ConsoleToMSBuild="true" ContinueOnError="true" Condition="'$(CreatorDeployDir)' == ''">
+      <Output TaskParameter="ConsoleOutput" ItemName="CreatorDeployRaw" />
+    </Exec>
+    <ItemGroup>
+      <CreatorCopyFlag Include="$([System.String]::Copy('%(CreatorDeployRaw.Identity)').Substring(11))" Condition="$([System.String]::Copy('%(CreatorDeployRaw.Identity)').StartsWith('EDITORCOPY:'))" />
+    </ItemGroup>
+    <PropertyGroup>
+      <CreatorCopyVal>@(CreatorCopyFlag)</CreatorCopyVal>
+    </PropertyGroup>
+    <ItemGroup>
+      <CreatorDeployTarget Include="$([System.String]::Copy('%(CreatorDeployRaw.Identity)').Substring(11))" Condition="$([System.String]::Copy('%(CreatorDeployRaw.Identity)').StartsWith('EDITORDEST:')) And '$(CreatorCopyVal)' == '1'" />
+      <CreatorDeployTarget Include="$(CreatorDeployDir)" Condition="'$(CreatorDeployDir)' != ''" />
+    </ItemGroup>
+    <MakeDir Directories="@(CreatorDeployTarget)" Condition="'@(CreatorDeployTarget)' != ''" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="%(CreatorDeployTarget.Identity)" SkipUnchangedFiles="true" Condition="'@(CreatorDeployTarget)' != '' And Exists('$(TargetPath)')" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="%(CreatorDeployTarget.Identity)" SkipUnchangedFiles="true" Condition="'@(CreatorDeployTarget)' != '' And Exists('$(TargetDir)$(TargetName).pdb')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Skins\group_skins.bat" DestinationFolder="%(CreatorDeployTarget.Identity)" SkipUnchangedFiles="true" Condition="'@(CreatorDeployTarget)' != '' And Exists('$(MSBuildProjectDirectory)\Skins\group_skins.bat')" />
+    <Message Importance="high" Text="Creator deployed to %(CreatorDeployTarget.Identity)" Condition="'@(CreatorDeployTarget)' != ''" />
+  </Target>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

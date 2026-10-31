@@ -1,0 +1,174 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using BepInEx.Unity.IL2CPP.Utils.Collections;
+using BetterFG.Services;
+using BetterFG.UI;
+using FGClient;
+using HarmonyLib;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace BetterFG.Tweaks
+{
+    public class ChangeFallGuysLogo : BfgTweak
+    {
+        public ChangeFallGuysLogo(System.IntPtr ptr) : base(ptr) { }
+
+        public override string TweakId => "custom_logo";
+        public override string TweakLabel => "tweak.custom_splash_logo";
+        public override bool DefaultEnabled => true;
+
+        private const string PathKey = "tweak.custom_logo.path";
+
+        public static ChangeFallGuysLogo Instance { get; private set; }
+        void Awake() => Instance = this;
+
+        private Texture2D _targetTex;
+        private Texture2D _originalTex;
+        private Image _targetImg;
+        private Sprite _originalSprite;
+        private Sprite _customSprite;
+        // true while _targetTex holds our bytes, DisableTweak rewrites it so the fast reapply
+        // path must not skip the full pass after an off/on cycle
+        private bool _texApplied;
+
+        public override List<TweakButton> GetCustomButtons() => new List<TweakButton>
+        {
+            new TweakButton { Label = "ui.load_png", Width = 46f, OnClick = PickAndReload }
+        };
+
+        public override TweakPreview GetPreview() => new TweakPreview
+        {
+            Get = () => _customSprite != null ? _customSprite.texture : null
+        };
+
+        private void PickAndReload()
+        {
+            WinDialogs.PickPng("Select Logo PNG", path =>
+            {
+                if (path == null) return;
+                var bytes = File.ReadAllBytes(path);
+                SettingsService.Set(PathKey, path);
+                StartCoroutine(ApplyBytes(bytes).WrapToIl2Cpp());
+            });
+        }
+
+        private System.Collections.IEnumerator ApplyBytes(byte[] bytes)
+        {
+            yield return null;
+            if (IsEnabled) { DisableTweak(); }
+            Overwrite(bytes);
+        }
+
+        public override void EnableTweak()
+        {
+            // reapply path (title screen OnEnable re-runs this): targets from the first sweep still
+            // alive means the texture still holds our bytes, only the Image's sprite gets stomped —
+            // re-assert it and skip the two whole-heap scans + the file re-read
+            if (_texApplied && _customSprite != null && _targetImg != null && _targetTex != null)
+            {
+                _targetImg.sprite = _customSprite;
+                return;
+            }
+
+            var bytes = LoadBytes();
+            if (bytes == null) return;
+            Overwrite(bytes);
+        }
+
+        private void Overwrite(byte[] bytes)
+        {
+            _customSprite = LoadSprite(bytes);
+
+            foreach (var sprite in Resources.FindObjectsOfTypeAll<Sprite>())
+            {
+                if (sprite.name != "UI_S11_Logo_Splash") continue;
+                _targetTex = sprite.texture;
+                if (_originalTex == null)
+                {
+                    _originalTex = new Texture2D(_targetTex.width, _targetTex.height, _targetTex.format, _targetTex.mipmapCount, !_targetTex.isDataSRGB);
+                    _originalTex.hideFlags = HideFlags.HideAndDontSave;
+                    Graphics.CopyTexture(_targetTex, _originalTex);
+                }
+                _targetTex.LoadImage(bytes);
+                _texApplied = true;
+                break;
+            }
+
+            foreach (var img in Resources.FindObjectsOfTypeAll<Image>())
+            {
+                if (img.name != "TitleScreenLogo") continue;
+                _targetImg = img;
+                if (_originalSprite == null) _originalSprite = img.sprite;
+                img.sprite = _customSprite;
+                break;
+            }
+        }
+
+        public override void DisableTweak()
+        {
+            if (_targetImg != null && _originalSprite != null)
+                _targetImg.sprite = _originalSprite;
+            if (_targetTex != null && _originalTex != null && _texApplied)
+            {
+                _targetTex.Reinitialize(_originalTex.width, _originalTex.height, _originalTex.format, _originalTex.mipmapCount > 1);
+                _targetTex.Apply(false);
+                Graphics.CopyTexture(_originalTex, _targetTex);
+            }
+            _texApplied = false;
+        }
+
+        private byte[] LoadBytes()
+        {
+            var saved = SettingsService.Get(PathKey, "");
+            if (!string.IsNullOrEmpty(saved) && File.Exists(saved))
+                return File.ReadAllBytes(saved);
+            return GetEmbeddedBytes();
+        }
+
+        private static Sprite LoadSprite(byte[] bytes)
+        {
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            ImageConversion.LoadImage(tex, bytes);
+            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+        }
+
+        private static byte[] GetEmbeddedBytes()
+        {
+            var asm = Assembly.GetExecutingAssembly();
+            using var stream = asm.GetManifestResourceStream("BetterFG.assets.ui.betterfg_splash.png");
+            if (stream == null)
+            {
+                Plugin.Log.LogWarning("ChangeFallGuysLogo: embedded splash not found");
+                return null;
+            }
+            var bytes = new byte[stream.Length];
+            stream.Read(bytes, 0, bytes.Length);
+            return bytes;
+        }
+    }
+
+    // the game sometimes re-sets the splash logo back to default. when the title screen vm
+    // enables, reapply our custom logo (if the tweak is on) and the custom menu background
+    // (gradient colours + circle pattern) onto the title screen's season background.
+    [HarmonyPatch(typeof(TitleScreenViewModel), nameof(TitleScreenViewModel.OnEnable))]
+    internal static class ChangeFallGuysLogoReapplyPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            var tweak = ChangeFallGuysLogo.Instance;
+            if (tweak != null && tweak.IsEnabled)
+            {
+                try { tweak.EnableTweak(); }
+                catch (Exception ex) { Plugin.Log?.LogWarning("ChangeFallGuysLogo: reapply failed " + ex.Message); }
+            }
+
+            try { Customization.UI.MenuCustomizationApplication.Instance?.ReapplyTitleScreenBg(); }
+            catch (Exception ex) { Plugin.Log?.LogWarning("ChangeFallGuysLogo: title bg reapply failed " + ex.Message); }
+        }
+    }
+}
